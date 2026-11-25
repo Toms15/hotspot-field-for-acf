@@ -286,6 +286,98 @@ class HotspotFieldRenderTest extends Hotspot_Field_Test_Case {
 	}
 
 	/**
+	 * A Hotspot without a Label is still named, after its place in the list.
+	 */
+	public function test_hotspot_without_a_label_is_named_after_its_position(): void {
+		$html = hotspot_field_render_hotspots(
+			array(
+				self::HOTSPOTS[0],
+				array(
+					'x' => 50,
+					'y' => 50,
+				),
+			),
+			$this->image_id
+		);
+
+		$this->assertSame( array( 'Lamp', 'Hotspot 2' ), array_column( $this->buttons( $html ), 'name' ) );
+	}
+
+	/**
+	 * The shortcode renders the Hotspot Field of another post only when that
+	 * post is public.
+	 */
+	public function test_shortcode_renders_another_published_post(): void {
+		$post_id = $this->create_post_with_hotspots( self::HOTSPOTS );
+
+		$this->assertCount( 3, $this->buttons( do_shortcode( sprintf( '[hotspot_field name="hotspots" post_id="%d"]', $post_id ) ) ) );
+	}
+
+	/**
+	 * The shortcode never reveals Hotspots of posts visitors cannot see.
+	 *
+	 * @dataProvider provide_non_public_posts
+	 *
+	 * @param array $post_data Post fields.
+	 */
+	public function test_shortcode_renders_nothing_for_a_non_public_post( array $post_data ): void {
+		$post_id = $this->create_post_with_hotspots( self::HOTSPOTS, $post_data );
+
+		$this->assertSame( '', do_shortcode( sprintf( '[hotspot_field name="hotspots" post_id="%d"]', $post_id ) ) );
+	}
+
+	/**
+	 * Posts whose Hotspots the shortcode must not show to visitors.
+	 *
+	 * @return array<string, array{array}>
+	 */
+	public static function provide_non_public_posts(): array {
+		return array(
+			'draft'              => array( array( 'post_status' => 'draft' ) ),
+			'pending'            => array( array( 'post_status' => 'pending' ) ),
+			'private'            => array( array( 'post_status' => 'private' ) ),
+			'trashed'            => array( array( 'post_status' => 'trash' ) ),
+			'password-protected' => array( array( 'post_password' => 'secret' ) ),
+		);
+	}
+
+	/**
+	 * In the post itself (as in its preview) the shortcode renders the post's
+	 * own Hotspots even before it is published.
+	 */
+	public function test_shortcode_renders_the_current_draft_post(): void {
+		$post_id         = $this->create_post_with_hotspots( self::HOTSPOTS, array( 'post_status' => 'draft' ) );
+		$GLOBALS['post'] = get_post( $post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Simulates rendering inside the post.
+
+		$this->assertCount( 3, $this->buttons( do_shortcode( '[hotspot_field name="hotspots"]' ) ) );
+		$this->assertCount( 3, $this->buttons( do_shortcode( sprintf( '[hotspot_field name="hotspots" post_id="%d"]', $post_id ) ) ) );
+	}
+
+	/**
+	 * In a preview the current post is the latest revision; its parent's
+	 * Hotspots still render.
+	 */
+	public function test_shortcode_renders_the_parent_of_the_previewed_revision(): void {
+		$post_id     = $this->create_post_with_hotspots( self::HOTSPOTS, array( 'post_status' => 'draft' ) );
+		$revision_id = _wp_put_post_revision( get_post( $post_id ), true );
+		$this->assertIsInt( $revision_id );
+		$GLOBALS['post'] = get_post( $revision_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Simulates a preview.
+
+		$this->assertCount( 3, $this->buttons( do_shortcode( sprintf( '[hotspot_field name="hotspots" post_id="%d"]', $post_id ) ) ) );
+	}
+
+	/**
+	 * Until its password is entered, a password-protected post's own
+	 * Hotspots stay hidden too.
+	 */
+	public function test_shortcode_renders_nothing_in_the_current_post_until_its_password_is_entered(): void {
+		$post_id         = $this->create_post_with_hotspots( self::HOTSPOTS, array( 'post_password' => 'secret' ) );
+		$GLOBALS['post'] = get_post( $post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Simulates rendering inside the post.
+
+		$this->assertSame( '', do_shortcode( '[hotspot_field name="hotspots"]' ) );
+	}
+
+	/**
 	 * Names that are not a Hotspot Field render nothing.
 	 */
 	public function test_entry_points_render_nothing_for_other_fields(): void {
@@ -300,11 +392,12 @@ class HotspotFieldRenderTest extends Hotspot_Field_Test_Case {
 	/**
 	 * Creates a post whose Linked Image Field holds the test image.
 	 *
-	 * @param array $hotspots Hotspots to save.
+	 * @param array $hotspots  Hotspots to save.
+	 * @param array $post_data Post fields; published by default.
 	 * @return int Post ID.
 	 */
-	private function create_post_with_hotspots( array $hotspots ): int {
-		$post_id = self::factory()->post->create();
+	private function create_post_with_hotspots( array $hotspots, array $post_data = array() ): int {
+		$post_id = self::factory()->post->create( $post_data );
 		update_field( 'field_hotspot_tests_photo', $this->image_id, $post_id );
 		$this->save_hotspots( $post_id, $hotspots );
 

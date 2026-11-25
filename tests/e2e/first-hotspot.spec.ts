@@ -56,7 +56,7 @@ test.describe( 'First Hotspot in a field group', () => {
 		` );
 
 		imageId = Number( wp( 'media', 'import', 'wp-content/plugins/hotspot-field-for-acf/tests/fixtures/hotspot-photo.jpg', '--alt=A living room', '--porcelain' ) );
-		postId = Number( wp( 'post', 'create', '--post_type=post', '--post_status=draft', '--post_author=1', `--post_title=Hotspot e2e ${ suffix }`, '--porcelain' ) );
+		postId = Number( wp( 'post', 'create', '--post_type=post', '--post_status=publish', '--post_author=1', `--post_title=Hotspot e2e ${ suffix }`, '--porcelain' ) );
 		wpEval( `$result = update_field( '${ imageFieldKey }', ${ imageId }, ${ postId } );` );
 		pageId = Number(
 			wp(

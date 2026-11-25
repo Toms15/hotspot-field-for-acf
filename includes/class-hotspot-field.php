@@ -103,7 +103,10 @@ class Hotspot_Field extends \acf_field {
 	 *
 	 * Like every value ACF saves, it arrives slashed (as WordPress slashes form
 	 * data) and update_metadata() unslashes it again, so it is unslashed before
-	 * normalizing and the result is slashed for storage.
+	 * normalizing and the result is slashed for storage. A JSON string passed
+	 * to update_field() must therefore be slashed like form data
+	 * (wp_slash( wp_json_encode( $hotspots ) )); a list needs no slashing
+	 * unless its text contains backslashes, as with ACF's own fields.
 	 *
 	 * @param mixed      $value   Submitted value: a list, or its JSON encoding.
 	 * @param int|string $post_id Post ID.

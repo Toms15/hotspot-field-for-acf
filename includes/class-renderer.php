@@ -56,11 +56,16 @@ final class Renderer {
 
 		$buttons = '';
 
-		foreach ( Hotspot_Value::normalize( $hotspots ) as $hotspot ) {
+		foreach ( Hotspot_Value::normalize( $hotspots ) as $index => $hotspot ) {
+			$name = '' !== $hotspot['label']
+				? $hotspot['label']
+				/* translators: %d: position of the Hotspot in the list, starting at 1. */
+				: sprintf( __( 'Hotspot %d', 'hotspot-field-for-acf' ), $index + 1 );
+
 			$buttons .= sprintf(
 				'<button type="button" class="hotspot-field__hotspot" style="%s"><span class="hotspot-field__label">%s</span></button>',
 				esc_attr( sprintf( 'left: %s%%; top: %s%%;', self::number( $hotspot['x'] ), self::number( $hotspot['y'] ) ) ),
-				esc_html( $hotspot['label'] )
+				esc_html( $name )
 			);
 		}
 

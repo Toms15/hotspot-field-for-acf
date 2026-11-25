@@ -124,13 +124,16 @@
 			const attachmentId = parseInt( linked.val(), 10 );
 			if ( attachmentId && window.wp?.media?.attachment ) {
 				const attachment = window.wp.media.attachment( attachmentId );
-				attachment.fetch().then( () => {
-					const sizes = attachment.get( 'sizes' ) || {};
-					const url = ( sizes.large || sizes.full || {} ).url || attachment.get( 'url' );
-					if ( url ) {
-						this.showImage( url );
-					}
-				} );
+				Promise.resolve( attachment.fetch() )
+					.then( () => {
+						const sizes = attachment.get( 'sizes' ) || {};
+						const url = ( sizes.large || sizes.full || {} ).url || attachment.get( 'url' );
+						if ( url ) {
+							this.showImage( url );
+						}
+					} )
+					// Keep the preview when the larger size cannot be fetched.
+					.catch( () => {} );
 			}
 		},
 
