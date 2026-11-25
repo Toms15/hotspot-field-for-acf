@@ -1,6 +1,27 @@
+import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
 
+/**
+ * Deletes a field group and its fields through ACF, using WP-CLI in wp-env.
+ *
+ * @param id Field group post ID.
+ */
+function deleteFieldGroup( id: number ): void {
+	execFileSync( 'npx', [ 'wp-env', 'run', 'cli', 'wp', 'eval', `acf_delete_field_group( ${ id } );` ], {
+		stdio: 'ignore',
+	} );
+}
+
 test.describe( 'Hotspot Field in a field group', () => {
+	let fieldGroupId: number | undefined;
+
+	test.afterEach( () => {
+		if ( fieldGroupId ) {
+			deleteFieldGroup( fieldGroupId );
+			fieldGroupId = undefined;
+		}
+	} );
+
 	test( 'a site builder can add a Hotspot Field and save its Linked Image Field name', async ( {
 		page,
 	} ) => {
@@ -23,6 +44,8 @@ test.describe( 'Hotspot Field in a field group', () => {
 
 		await page.getByRole( 'button', { name: 'Save Changes' } ).click();
 		await expect( page.getByText( 'Field group published.' ) ).toBeVisible();
+		fieldGroupId = Number( new URL( page.url() ).searchParams.get( 'post' ) ) || undefined;
+		expect( fieldGroupId ).toBeDefined();
 
 		await page.reload();
 		const savedField = page.locator( '.acf-field-object' ).first();

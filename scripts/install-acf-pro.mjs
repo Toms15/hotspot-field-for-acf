@@ -31,7 +31,7 @@ function readLicence() {
 		return '';
 	}
 	for ( const line of readFileSync( envFile, 'utf8' ).split( /\r?\n/ ) ) {
-		const match = line.match( /^\s*ACF_PRO_LICENSE\s*=\s*(.*)\s*$/ );
+		const match = line.match( /^\s*(?:export\s+)?ACF_PRO_LICENSE\s*=\s*(.*?)\s*$/ );
 		if ( match ) {
 			return match[ 1 ].replace( /^(['"])(.*)\1$/, '$2' ).trim();
 		}
@@ -51,13 +51,21 @@ const url = new URL( 'https://connect.advancedcustomfields.com/v2/plugins/downlo
 url.searchParams.set( 'p', 'pro' );
 url.searchParams.set( 'k', licence );
 
-const response = await fetch( url );
-if ( ! response.ok ) {
-	console.error( `Downloading ACF Pro failed with HTTP ${ response.status }. Check the licence key.` );
+// The URL carries the licence key, so errors from fetch() are never shown:
+// only a generic message and, when there is one, the HTTP status.
+let zip;
+try {
+	const response = await fetch( url );
+	if ( ! response.ok ) {
+		console.error( `Downloading ACF Pro failed with HTTP ${ response.status }. Check the licence key.` );
+		process.exit( 1 );
+	}
+	zip = Buffer.from( await response.arrayBuffer() );
+} catch {
+	console.error( 'Downloading ACF Pro failed (network error).' );
 	process.exit( 1 );
 }
 
-const zip = Buffer.from( await response.arrayBuffer() );
 if ( zip.subarray( 0, 2 ).toString() !== 'PK' ) {
 	console.error( 'Downloading ACF Pro did not return a zip file. Check the licence key.' );
 	process.exit( 1 );

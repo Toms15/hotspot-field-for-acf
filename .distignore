@@ -1,5 +1,6 @@
 # Files and directories left out of the distributable plugin (see scripts/build.sh).
 /.git
+/.claude
 /.github
 /.idea
 /.vscode
@@ -32,3 +33,4 @@ phpcs.xml.dist
 phpunit.xml.dist
 playwright.config.ts
 solo.yml
+/.htaccess
