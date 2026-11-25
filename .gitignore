@@ -1,0 +1,26 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Dependencies
+/node_modules/
+/vendor/
+
+# Build / release artifacts
+/build/
+/dist/
+*.zip
+
+# Tooling caches
+.phpunit.result.cache
+.phpcs-cache
+.php-cs-fixer.cache
+*.log
+
+# Local environment & secrets
+.env
+.env.*
+.claude/settings.local.json
