@@ -378,6 +378,38 @@ class HotspotFieldRenderTest extends Hotspot_Field_Test_Case {
 	}
 
 	/**
+	 * A post ID that is not positive means the current post, so the password
+	 * check still applies.
+	 *
+	 * @dataProvider provide_non_positive_post_ids
+	 *
+	 * @param string $post_id Shortcode post_id attribute.
+	 */
+	public function test_shortcode_treats_a_non_positive_post_id_as_the_current_post( string $post_id ): void {
+		$protected_id    = $this->create_post_with_hotspots( self::HOTSPOTS, array( 'post_password' => 'secret' ) );
+		$GLOBALS['post'] = get_post( $protected_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Simulates rendering on the protected post's page.
+
+		$this->assertSame( '', do_shortcode( sprintf( '[hotspot_field name="hotspots" post_id="%s"]', $post_id ) ) );
+
+		$public_id       = $this->create_post_with_hotspots( self::HOTSPOTS );
+		$GLOBALS['post'] = get_post( $public_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Simulates rendering on a public post's page.
+
+		$this->assertCount( 3, $this->buttons( do_shortcode( sprintf( '[hotspot_field name="hotspots" post_id="%s"]', $post_id ) ) ) );
+	}
+
+	/**
+	 * Post IDs that are not positive.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function provide_non_positive_post_ids(): array {
+		return array(
+			'zero'     => array( '0' ),
+			'negative' => array( '-5' ),
+		);
+	}
+
+	/**
 	 * Names that are not a Hotspot Field render nothing.
 	 */
 	public function test_entry_points_render_nothing_for_other_fields(): void {

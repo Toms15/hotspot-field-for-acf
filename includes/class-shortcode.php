@@ -44,7 +44,8 @@ final class Shortcode {
 			self::TAG
 		);
 
-		$post_id = is_numeric( $atts['post_id'] ) ? (int) $atts['post_id'] : null;
+		// A missing, zero or negative post ID means the current post.
+		$post_id = is_numeric( $atts['post_id'] ) && (int) $atts['post_id'] > 0 ? (int) $atts['post_id'] : null;
 		$size    = '' === trim( (string) $atts['size'] ) ? 'large' : trim( (string) $atts['size'] );
 
 		if ( ! self::can_show( $post_id ) ) {
