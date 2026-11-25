@@ -22,6 +22,10 @@ const VERSION             = '1.0.0';
 const MINIMUM_ACF_VERSION = '6.0';
 const PLUGIN_FILE         = __FILE__;
 
+require_once __DIR__ . '/includes/class-hotspot-value.php';
+require_once __DIR__ . '/includes/class-renderer.php';
+require_once __DIR__ . '/includes/class-shortcode.php';
 require_once __DIR__ . '/includes/class-plugin.php';
+require_once __DIR__ . '/includes/functions.php';
 
 Plugin::boot();

@@ -1,6 +1,7 @@
 <?php
 /**
- * Bootstrap: checks the ACF requirement and registers the Hotspot Field type.
+ * Bootstrap: checks the ACF requirement, registers the Hotspot Field type,
+ * the shortcode and the frontend assets.
  *
  * @package HotspotFieldForAcf
  */
@@ -23,10 +24,14 @@ final class Plugin {
 	}
 
 	/**
-	 * Registers the field type when ACF is compatible, otherwise only shows an
-	 * admin notice.
+	 * Registers the shortcode and the frontend assets, and the field type when
+	 * ACF is compatible (otherwise only shows an admin notice). Without ACF the
+	 * render entry points output nothing instead of failing.
 	 */
 	public static function init(): void {
+		Shortcode::register();
+		add_action( 'init', array( Renderer::class, 'register_assets' ) );
+
 		if ( ! self::has_compatible_acf() ) {
 			add_action( 'admin_notices', array( self::class, 'render_requirement_notice' ) );
 			return;

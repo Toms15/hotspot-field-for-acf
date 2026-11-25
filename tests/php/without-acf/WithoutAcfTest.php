@@ -24,6 +24,17 @@ class WithoutAcfTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Templates and content that use the render entry points keep working and
+	 * simply output nothing.
+	 */
+	public function test_render_entry_points_output_nothing(): void {
+		$post_id = self::factory()->post->create();
+
+		$this->assertSame( '', hotspot_field_render( 'hotspots', $post_id ) );
+		$this->assertSame( '', do_shortcode( sprintf( '[hotspot_field name="hotspots" post_id="%d"]', $post_id ) ) );
+	}
+
+	/**
 	 * Users who cannot manage plugins are not shown the notice.
 	 */
 	public function test_other_users_do_not_see_the_notice(): void {

@@ -36,6 +36,10 @@
 				<element value="HotspotFieldForAcf"/>
 				<element value="hotspot_field"/>
 			</property>
+			<!-- Lets classes extending the shared test case skip the prefix rule like other test classes. -->
+			<property name="custom_test_classes" type="array">
+				<element value="Hotspot_Field_Test_Case"/>
+			</property>
 		</properties>
 	</rule>
 
