@@ -1,0 +1,15 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/wp-env.json",
+	"core": null,
+	"phpVersion": "8.3",
+	"plugins": [
+		"./.wp-env-plugins/advanced-custom-fields-pro",
+		"https://downloads.wordpress.org/plugin/plugin-check.latest-stable.zip"
+	],
+	"mappings": {
+		"wp-content/plugins/hotspot-field-for-acf": "."
+	},
+	"lifecycleScripts": {
+		"afterStart": "wp-env run cli wp plugin activate hotspot-field-for-acf && wp-env run tests-cli wp plugin activate hotspot-field-for-acf"
+	}
+}

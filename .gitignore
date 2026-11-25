@@ -24,3 +24,12 @@ Thumbs.db
 .env
 .env.*
 .claude/settings.local.json
+
+# wp-env
+/.wp-env-plugins/
+/.wp-env.override.json
+
+# Playwright
+/test-results/
+/playwright-report/
+/artifacts/

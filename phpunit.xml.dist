@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+	Each test suite needs its own process because it boots WordPress differently
+	(see tests/php/bootstrap.php). `npm run test:php` runs all three.
+-->
+<phpunit
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+	bootstrap="tests/php/bootstrap.php"
+	defaultTestSuite="default"
+	colors="true"
+	beStrictAboutTestsThatDoNotTestAnything="true"
+	convertDeprecationsToExceptions="true"
+>
+	<testsuites>
+		<!-- ACF Pro and the plugin active. -->
+		<testsuite name="default">
+			<directory suffix="Test.php">tests/php/default</directory>
+		</testsuite>
+		<!-- Run with HOTSPOT_FIELD_TESTS_WITHOUT_ACF=1: ACF is not loaded. -->
+		<testsuite name="without-acf">
+			<directory suffix="Test.php">tests/php/without-acf</directory>
+		</testsuite>
+		<!-- Run with HOTSPOT_FIELD_TESTS_ACF_VERSION=5.12.6: ACF reports an unsupported version. -->
+		<testsuite name="old-acf">
+			<directory suffix="Test.php">tests/php/old-acf</directory>
+		</testsuite>
+	</testsuites>
+</phpunit>

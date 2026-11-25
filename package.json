@@ -1,0 +1,30 @@
+{
+	"name": "hotspot-field-for-acf",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Development tooling for the Hotspot Field for ACF WordPress plugin.",
+	"license": "GPL-2.0-or-later",
+	"engines": {
+		"node": ">=22"
+	},
+	"scripts": {
+		"env:acf-pro": "node scripts/install-acf-pro.mjs",
+		"env:start": "npm run env:acf-pro && wp-env start",
+		"env:stop": "wp-env stop",
+		"env:destroy": "wp-env destroy",
+		"wp-env": "wp-env",
+		"build": "bash scripts/build.sh",
+		"lint:php": "composer lint",
+		"plugin-check": "node scripts/plugin-check.mjs",
+		"test:php": "npm run test:php:default && npm run test:php:without-acf && npm run test:php:old-acf",
+		"test:php:default": "wp-env run tests-cli --env-cwd=wp-content/plugins/hotspot-field-for-acf vendor/bin/phpunit --testsuite default",
+		"test:php:without-acf": "wp-env run tests-cli --env-cwd=wp-content/plugins/hotspot-field-for-acf env HOTSPOT_FIELD_TESTS_WITHOUT_ACF=1 vendor/bin/phpunit --testsuite without-acf",
+		"test:php:old-acf": "wp-env run tests-cli --env-cwd=wp-content/plugins/hotspot-field-for-acf env HOTSPOT_FIELD_TESTS_ACF_VERSION=5.12.6 vendor/bin/phpunit --testsuite old-acf",
+		"test:e2e": "playwright test",
+		"test": "npm run lint:php && npm run plugin-check && npm run test:php && npm run test:e2e"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.65.1",
+		"@wordpress/env": "^12.2.0"
+	}
+}

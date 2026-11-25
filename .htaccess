@@ -1,0 +1,6 @@
+# Development environment only: excluded from the distributable plugin by .distignore.
+#
+# wp-env mounts the whole repository as this plugin's directory, so without
+# this file Apache would serve .env (the ACF Pro licence key), .git and every
+# other dotfile or dot-directory. Deny any path segment that starts with a dot.
+RedirectMatch 403 /\.
