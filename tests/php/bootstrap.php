@@ -39,3 +39,5 @@ tests_add_filter(
 );
 
 require $hotspot_field_tests_dir . '/includes/bootstrap.php';
+
+require_once __DIR__ . '/includes/class-hotspot-field-test-case.php';

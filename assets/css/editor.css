@@ -1,0 +1,89 @@
+/*
+ * Hotspot Field for ACF: editor.
+ */
+.hotspot-field-editor__instructions {
+	margin: 0 0 8px;
+}
+
+.hotspot-field-editor__canvas {
+	position: relative;
+	display: inline-block;
+	max-width: 100%;
+	line-height: 0;
+	user-select: none;
+}
+
+.hotspot-field-editor__canvas[hidden] {
+	display: none;
+}
+
+.hotspot-field-editor__image {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	cursor: crosshair;
+}
+
+.hotspot-field-editor__markers {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+}
+
+.hotspot-field-editor__marker {
+	position: absolute;
+	box-sizing: border-box;
+	min-width: 24px;
+	height: 24px;
+	margin: 0;
+	padding: 0 4px;
+	border: 2px solid #fff;
+	border-radius: 12px;
+	background: #2271b1;
+	box-shadow: 0 1px 3px rgb(0 0 0 / 40%);
+	color: #fff;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 20px;
+	pointer-events: auto;
+	transform: translate(-50%, -50%);
+}
+
+.hotspot-field-editor__marker.is-selected {
+	background: #d63638;
+	outline: 2px solid #1d2327;
+}
+
+.hotspot-field-editor__list {
+	margin: 12px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.hotspot-field-editor__list:empty {
+	display: none;
+}
+
+.hotspot-field-editor__row {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: 4px 8px;
+	align-items: start;
+	margin: 0 0 8px;
+	padding: 8px;
+	border: 1px solid #dcdcde;
+	border-left: 4px solid #dcdcde;
+}
+
+.hotspot-field-editor__row.is-selected {
+	border-left-color: #d63638;
+}
+
+.hotspot-field-editor__row-title {
+	grid-column: 1 / -1;
+	font-weight: 600;
+}
+
+.hotspot-field-editor__row label {
+	padding-top: 4px;
+}
