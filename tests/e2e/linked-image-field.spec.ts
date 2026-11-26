@@ -205,6 +205,30 @@ test.describe( 'Linked Image Field', () => {
 		await expectImage( field( roomRows.nth( 1 ), 'room_hotspots' ), images.bedroom );
 	} );
 
+	test( 'a duplicated repeater row has its own editor, with one live region', async ( { page } ) => {
+		await openEditor( page, postId );
+
+		const roomRows = rows( page, 'rooms' );
+		// ACF shows a row's Duplicate button while Shift is held.
+		await roomRows.nth( 0 ).hover();
+		await page.keyboard.down( 'Shift' );
+		await roomRows.nth( 0 ).locator( ':scope > .acf-row-handle [data-event="duplicate-row"]' ).click();
+		await page.keyboard.up( 'Shift' );
+		await expect( roomRows ).toHaveCount( 3 );
+
+		for ( const index of [ 0, 1 ] ) {
+			const room = field( roomRows.nth( index ), 'room_hotspots' );
+			await expectImage( room, images.kitchen );
+			await expect( room.locator( '.hotspot-field-editor__status' ) ).toHaveCount( 1 );
+		}
+
+		// The copy works on its own: a Hotspot added there stays there.
+		const copy = field( roomRows.nth( 1 ), 'room_hotspots' );
+		await clickAt( await loadedImage( copy ), 0.5, 0.5 );
+		await expect( copy.getByRole( 'listitem' ) ).toHaveCount( 1 );
+		await expect( field( roomRows.nth( 0 ), 'room_hotspots' ).getByRole( 'listitem' ) ).toHaveCount( 0 );
+	} );
+
 	test( 'a Hotspot Field whose Linked Image Field does not exist says so', async ( { page } ) => {
 		await openEditor( page, postId );
 

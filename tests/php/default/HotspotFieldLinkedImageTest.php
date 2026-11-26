@@ -205,11 +205,23 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 	}
 
 	/**
+	 * Closes the have_rows() loops a test left open.
+	 */
+	public function tear_down(): void {
+		while ( acf_get_loop( 'active' ) ) {
+			acf_remove_loop( 'active' );
+		}
+
+		parent::tear_down();
+	}
+
+	/**
 	 * A top-level Hotspot Field rendered inside a row still uses the
 	 * top-level image, not the row's.
 	 */
 	public function test_a_top_level_hotspot_field_rendered_inside_a_row_uses_the_top_level_image(): void {
 		$post_id = $this->create_post();
+		$this->go_to_post( $post_id );
 
 		$this->assertSame(
 			array(
@@ -217,6 +229,129 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 				array( $this->cover_id, 1 ),
 			),
 			$this->render_rows( 'rooms', $post_id, static fn () => hotspot_field_render( 'house_hotspots' ) )
+		);
+	}
+
+	/**
+	 * Inside a loop over an options page's rows, a top-level Hotspot Field
+	 * is still read from the current post, as get_field() would.
+	 */
+	public function test_a_top_level_hotspot_field_inside_an_options_loop_uses_the_current_post(): void {
+		$post_id = $this->create_post();
+		update_field(
+			'field_linked_rooms',
+			array( array( 'field_linked_room_photo' => $this->bedroom_id ) ),
+			'option'
+		);
+		$this->go_to_post( $post_id );
+
+		$html = array();
+		while ( have_rows( 'rooms', 'option' ) ) {
+			the_row();
+			$html[] = hotspot_field_render( 'house_hotspots' );
+			$html[] = do_shortcode( '[hotspot_field name="house_hotspots"]' );
+		}
+
+		$this->assertCount( 2, $html );
+		foreach ( $html as $markup ) {
+			$this->assertRendersImage( $this->cover_id, $markup );
+		}
+	}
+
+	/**
+	 * A loop a theme left open on another post (say, to read its first row
+	 * only) does not change where a top-level Hotspot Field is read from.
+	 */
+	public function test_a_top_level_hotspot_field_after_a_loop_left_open_on_another_post_uses_the_current_post(): void {
+		$post_id = $this->create_post();
+		$other   = $this->create_post();
+		update_field( 'field_linked_cover', $this->bedroom_id, $other );
+		$this->go_to_post( $post_id );
+
+		$this->assertTrue( have_rows( 'rooms', $other ) );
+		the_row();
+
+		$this->assertRendersImage( $this->cover_id, hotspot_field_render( 'house_hotspots' ) );
+		$this->assertRendersImage( $this->cover_id, do_shortcode( '[hotspot_field name="house_hotspots"]' ) );
+	}
+
+	/**
+	 * Inside a loop over a private post's rows, the shortcode in a public post
+	 * renders the public post's top-level Hotspot Field, never the private
+	 * post's.
+	 */
+	public function test_shortcode_inside_a_private_posts_loop_renders_the_current_posts_top_level_field(): void {
+		$post_id = $this->create_post();
+		$private = $this->create_post();
+		wp_update_post(
+			array(
+				'ID'          => $private,
+				'post_status' => 'private',
+			)
+		);
+		update_field( 'field_linked_cover', $this->bedroom_id, $private );
+		$this->go_to_post( $post_id );
+
+		$html = $this->render_rows_raw( 'rooms', $private, static fn () => do_shortcode( '[hotspot_field name="house_hotspots"]' ) );
+
+		$this->assertCount( 2, $html );
+		foreach ( $html as $markup ) {
+			$this->assertRendersImage( $this->cover_id, $markup );
+		}
+	}
+
+	/**
+	 * The shortcode renders a row's Hotspot Field only when visitors may see
+	 * the post the loop reads: not a private, draft or password-protected
+	 * one; hotspot_field_render(), used by themes, still renders it.
+	 *
+	 * @dataProvider provide_hidden_posts
+	 *
+	 * @param array $post_data Post fields of the loop's post.
+	 */
+	public function test_shortcode_renders_no_row_of_a_post_visitors_cannot_see( array $post_data ): void {
+		$post_id = $this->create_post();
+		$hidden  = $this->create_post();
+		wp_update_post( array( 'ID' => $hidden ) + $post_data );
+		$this->go_to_post( $post_id );
+
+		$this->assertSame( array( '', '' ), $this->render_rows_raw( 'rooms', $hidden, static fn () => do_shortcode( '[hotspot_field name="room_hotspots"]' ) ) );
+		$this->assertSame(
+			array(
+				array( $this->kitchen_id, 1 ),
+				array( $this->bedroom_id, 2 ),
+			),
+			$this->render_rows( 'rooms', $hidden, static fn () => hotspot_field_render( 'room_hotspots' ) )
+		);
+	}
+
+	/**
+	 * Posts that visitors cannot see.
+	 *
+	 * @return array<string, array{array}>
+	 */
+	public static function provide_hidden_posts(): array {
+		return array(
+			'private'            => array( array( 'post_status' => 'private' ) ),
+			'draft'              => array( array( 'post_status' => 'draft' ) ),
+			'password-protected' => array( array( 'post_password' => 'secret' ) ),
+		);
+	}
+
+	/**
+	 * The shortcode renders a row's Hotspot Field of another published post.
+	 */
+	public function test_shortcode_renders_a_row_of_another_published_post(): void {
+		$post_id = $this->create_post();
+		$other   = $this->create_post();
+		$this->go_to_post( $post_id );
+
+		$this->assertSame(
+			array(
+				array( $this->kitchen_id, 1 ),
+				array( $this->bedroom_id, 2 ),
+			),
+			$this->render_rows( 'rooms', $other, static fn () => do_shortcode( '[hotspot_field name="room_hotspots"]' ) )
 		);
 	}
 
@@ -419,15 +554,26 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 	}
 
 	/**
+	 * Makes a post the current one, as on its page.
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	private function go_to_post( int $post_id ): void {
+		$this->go_to( get_permalink( $post_id ) );
+		$this->assertTrue( have_posts() );
+		the_post();
+	}
+
+	/**
 	 * Renders something in each row of a top-level repeater or flexible
 	 * content field.
 	 *
-	 * @param string   $selector Field name.
-	 * @param int      $post_id  Post ID.
-	 * @param callable $render   Returns the markup for the current row.
+	 * @param string     $selector Field name.
+	 * @param int|string $post_id  ACF post ID.
+	 * @param callable   $render   Returns the markup for the current row.
 	 * @return list<string> Markup per row.
 	 */
-	private function render_rows_raw( string $selector, int $post_id, callable $render ): array {
+	private function render_rows_raw( string $selector, $post_id, callable $render ): array {
 		$html = array();
 
 		while ( have_rows( $selector, $post_id ) ) {
@@ -442,9 +588,9 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 	 * Renders something in each row and reads back the image and the number
 	 * of Hotspots of each render.
 	 *
-	 * @param string   $selector Field name.
-	 * @param int      $post_id  Post ID.
-	 * @param callable $render   Returns the markup for the current row.
+	 * @param string     $selector Field name.
+	 * @param int|string $post_id  ACF post ID.
+	 * @param callable   $render   Returns the markup for the current row.
 	 * @return list<array{int, int}> Attachment ID and number of Hotspots per row.
 	 */
 	private function render_rows( string $selector, int $post_id, callable $render ): array {

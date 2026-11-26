@@ -33,23 +33,13 @@ function hotspot_field_render_hotspots( array $hotspots, int|array|string $image
  * it.
  *
  * @param string   $name    The Hotspot Field's name.
- * @param int|null $post_id Post ID. Default: the current post, or the post of
- *                          the current have_rows() loop.
+ * @param int|null $post_id Post ID. Default: the current post (for a field of
+ *                          the current have_rows() row: the loop's post).
  * @param string   $size    Image size. Default 'large'.
  * @return string Markup, or an empty string when there is nothing to render.
  */
 function hotspot_field_render( string $name, ?int $post_id = null, string $size = 'large' ): string {
 	$resolved = HotspotFieldForAcf\Field_Resolver::resolve( $name, $post_id );
 
-	if ( null === $resolved ) {
-		return '';
-	}
-
-	$image = $resolved['image'];
-
-	if ( ! is_int( $image ) && ! is_string( $image ) && ! is_array( $image ) ) {
-		return '';
-	}
-
-	return hotspot_field_render_hotspots( $resolved['hotspots'], $image, $size );
+	return null === $resolved ? '' : HotspotFieldForAcf\Field_Resolver::render( $resolved, $size );
 }

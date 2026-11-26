@@ -27,21 +27,27 @@ final class Field_Resolver {
 	/**
 	 * Finds a Hotspot Field and its Linked Image Field's image.
 	 *
+	 * A Hotspot Field of the current `have_rows()` row (or of a row enclosing
+	 * it) is read from that loop's post, as get_sub_field() does; its Linked
+	 * Image Field falls back to the top-level fields of that same post. A
+	 * top-level Hotspot Field is read from the requested post, or the current
+	 * one, as get_field() does, whatever loop is open.
+	 *
 	 * @param string   $name    The Hotspot Field's name.
-	 * @param int|null $post_id Post ID; null for the current post (or the post
-	 *                          of the current `have_rows()` loop).
-	 * @return array{hotspots: array, image: mixed}|null The Hotspots and the
-	 *         raw image value (attachment ID, image array or URL; anything
-	 *         else when there is no image), or null when there is no such
-	 *         Hotspot Field.
+	 * @param int|null $post_id Post ID; null for the current post (or, for a
+	 *                          field of the current row, the loop's post).
+	 * @return array{hotspots: array, image: mixed, post_id: int|string}|null
+	 *         The Hotspots, the raw image value (attachment ID, image array
+	 *         or URL; anything else when there is no image) and the ACF post
+	 *         ID they were read from (a post ID, or for example 'option' or a
+	 *         block's ID), or null when there is no such Hotspot Field.
 	 */
 	public static function resolve( string $name, ?int $post_id ): ?array {
 		if ( '' === $name || ! function_exists( 'acf_maybe_get_field' ) ) {
 			return null;
 		}
 
-		$levels  = self::row_levels( $post_id );
-		$post_id = $levels ? end( $levels )['post_id'] : ( $post_id ?? false );
+		$levels = self::row_levels( $post_id );
 
 		foreach ( $levels as $index => $level ) {
 			$field = self::sub_field( $level, $name );
@@ -57,9 +63,12 @@ final class Field_Resolver {
 
 			return array(
 				'hotspots' => is_array( $hotspots ) ? $hotspots : array(),
-				'image'    => self::image( $field['linked_image_field'], array_slice( $levels, $index ), $post_id ),
+				'image'    => self::image( $field['linked_image_field'], array_slice( $levels, $index ), $level['post_id'] ),
+				'post_id'  => $level['post_id'],
 			);
 		}
+
+		$post_id = acf_get_valid_post_id( $post_id ?? false );
 
 		// Not strict: also finds the field on posts where it was never saved.
 		$field = acf_maybe_get_field( $name, $post_id, false );
@@ -73,7 +82,25 @@ final class Field_Resolver {
 		return array(
 			'hotspots' => is_array( $hotspots ) ? $hotspots : array(),
 			'image'    => self::image( $field['linked_image_field'], array(), $post_id ),
+			'post_id'  => $post_id,
 		);
+	}
+
+	/**
+	 * Renders what resolve() found.
+	 *
+	 * @param array{hotspots: array, image: mixed} $resolved Result of resolve().
+	 * @param string                               $size     Image size.
+	 * @return string Markup, or an empty string when there is no image.
+	 */
+	public static function render( array $resolved, string $size ): string {
+		$image = $resolved['image'];
+
+		if ( ! is_int( $image ) && ! is_string( $image ) && ! is_array( $image ) ) {
+			return '';
+		}
+
+		return Renderer::render( $resolved['hotspots'], $image, $size );
 	}
 
 	/**
@@ -91,7 +118,7 @@ final class Field_Resolver {
 	 *
 	 * @param string     $name    The Linked Image Field's name.
 	 * @param array      $levels  Row levels, innermost first.
-	 * @param int|string $post_id Post ID for the top level.
+	 * @param int|string $post_id ACF post ID for the top level.
 	 * @return mixed Raw value.
 	 */
 	private static function image( string $name, array $levels, $post_id ) {
