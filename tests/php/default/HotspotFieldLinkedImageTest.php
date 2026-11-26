@@ -642,7 +642,7 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 	 * content field.
 	 *
 	 * @param string           $selector Field name.
-	 * @param int|string|false $post_id ACF post ID; false for the current post.
+	 * @param int|string|false $post_id  ACF post ID; false for the current post.
 	 * @param callable         $render   Returns the markup for the current row.
 	 * @return list<string> Markup per row.
 	 */
@@ -662,7 +662,7 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 	 * of Hotspots of each render.
 	 *
 	 * @param string           $selector Field name.
-	 * @param int|string|false $post_id ACF post ID; false for the current post.
+	 * @param int|string|false $post_id  ACF post ID; false for the current post.
 	 * @param callable         $render   Returns the markup for the current row.
 	 * @return list<array{int, int}> Attachment ID and number of Hotspots per row.
 	 */
