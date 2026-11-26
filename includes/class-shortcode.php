@@ -11,7 +11,8 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * `[hotspot_field name="…" post_id="…" size="…"]` renders a Hotspot Field like
- * hotspot_field_render() does.
+ * hotspot_field_render() does, as long as visitors may see the post it is
+ * read from.
  */
 final class Shortcode {
 
@@ -52,7 +53,38 @@ final class Shortcode {
 			return '';
 		}
 
-		return hotspot_field_render( trim( (string) $atts['name'] ), $post_id, $size );
+		$resolved = Field_Resolver::resolve( trim( (string) $atts['name'] ), $post_id );
+
+		if ( null === $resolved || ! self::can_show_source( $resolved['post_id'], $post_id ) ) {
+			return '';
+		}
+
+		return Field_Resolver::render( $resolved, $size );
+	}
+
+	/**
+	 * Whether visitors may see a Hotspot Field read from another post than
+	 * the one can_show() checked: a field of a have_rows() row is read from
+	 * the loop's post, which a theme may have opened on any post. In a
+	 * preview ACF reads the checked post's fields from its latest revision,
+	 * which counts as the checked post.
+	 *
+	 * @param int|string $source_id ACF post ID the field was read from.
+	 * @param int|null   $post_id   Requested post ID; null for the current post.
+	 */
+	private static function can_show_source( $source_id, ?int $post_id ): bool {
+		if ( ! is_numeric( $source_id ) || (int) $source_id <= 0 ) {
+			return true;
+		}
+
+		$source_id  = (int) $source_id;
+		$checked_id = $post_id ?? (int) get_the_ID();
+
+		if ( $source_id === $checked_id || ( $checked_id && (int) wp_is_post_revision( $source_id ) === $checked_id ) ) {
+			return true;
+		}
+
+		return self::can_show( $source_id );
 	}
 
 	/**

@@ -58,7 +58,7 @@ class Hotspot_Field extends \acf_field {
 	 */
 	public function render_field( $field ): void {
 		printf(
-			'<div class="hotspot-field-editor" data-linked-image-field="%1$s"><input type="hidden" class="hotspot-field-editor__value" name="%2$s" value="%3$s" /><p class="hotspot-field-editor__instructions">%4$s</p><div class="hotspot-field-editor__canvas" hidden></div><ol class="hotspot-field-editor__list"></ol></div>',
+			'<div class="hotspot-field-editor" data-linked-image-field="%1$s"><input type="hidden" class="hotspot-field-editor__value" name="%2$s" value="%3$s" /><p class="hotspot-field-editor__instructions">%4$s</p><p class="hotspot-field-editor__message" role="status"></p><div class="hotspot-field-editor__canvas" hidden></div><ol class="hotspot-field-editor__list"></ol></div>',
 			esc_attr( $field['linked_image_field'] ?? '' ),
 			esc_attr( $field['name'] ),
 			esc_attr( (string) wp_json_encode( Hotspot_Value::normalize( $field['value'] ?? array() ) ) ),
@@ -110,6 +110,9 @@ class Hotspot_Field extends \acf_field {
 				'reordered'    => __( '%1$s moved to position %2$s of %3$s.', 'hotspot-field-for-acf' ),
 				/* translators: %s: name of the removed Hotspot, such as "Hotspot 1: Lamp". */
 				'removed'      => __( '%s removed.', 'hotspot-field-for-acf' ),
+				/* translators: %s: label of the Linked Image Field, such as "Photo". */
+				'noImage'      => __( 'No image chosen yet. Choose an image in the “%s” field to place Hotspots on it.', 'hotspot-field-for-acf' ),
+				'notFound'     => __( 'Linked Image Field not found. Ask the site builder to check which image field this Hotspot Field is linked to.', 'hotspot-field-for-acf' ),
 			)
 		);
 	}
