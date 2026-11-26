@@ -1,33 +1,5 @@
-import { execFileSync } from 'node:child_process';
-import { expect, test, type Locator, type Page, type Request } from '@playwright/test';
-
-/**
- * Runs WP-CLI in wp-env and returns what the command printed.
- *
- * @param args WP-CLI arguments.
- */
-function wp( ...args: string[] ): string {
-	return execFileSync( 'npx', [ 'wp-env', 'run', 'cli', 'wp', ...args ], {
-		encoding: 'utf8',
-		stdio: [ 'ignore', 'pipe', 'ignore' ],
-	} ).trim();
-}
-
-/**
- * Runs PHP in WordPress and returns the JSON it printed between markers.
- *
- * @param php PHP code that assigns the result to `$result`.
- */
-function wpEval< T >( php: string ): T {
-	const output = wp( 'eval', `${ php } echo '<<<', wp_json_encode( $result ), '>>>';` );
-	const match = output.match( /<<<([\s\S]*)>>>/ );
-	if ( ! match ) {
-		throw new Error( `WP-CLI printed no result: ${ output }` );
-	}
-	return JSON.parse( match[ 1 ] ) as T;
-}
-
-type Hotspot = { x: number; y: number; label: string; description: string };
+import { expect, test } from '@playwright/test';
+import { clickAt, loadedImage, openEditor, save, saveBlocked, wp, wpEval, type Hotspot } from './helpers';
 
 const suffix = Date.now();
 const rowError = 'This Hotspot needs a Label.';
@@ -107,7 +79,7 @@ test.describe( 'Validating a Hotspot Field on save', () => {
 		await openEditor( page, postId );
 
 		const field = page.locator( '.acf-field-hotspot' );
-		const image = await waitForImage( field );
+		const image = await loadedImage( field );
 		const rows = field.getByRole( 'listitem' );
 
 		await clickAt( image, 0.25, 0.5 );
@@ -141,12 +113,123 @@ test.describe( 'Validating a Hotspot Field on save', () => {
 		expect( savedHotspots( postId ).map( ( { label } ) => label ) ).toEqual( [ 'Lamp', 'Chair' ] );
 	} );
 
+	test( 'row messages stay with their Hotspot when the list is reordered or a Hotspot is removed', async ( { page } ) => {
+		const postId = createPost( 'reorder', false );
+		await openEditor( page, postId );
+
+		const field = page.locator( '.acf-field-hotspot' );
+		const image = await loadedImage( field );
+		const rows = field.getByRole( 'listitem' );
+
+		// Lamp, (no Label) "Near the window", Rug, (no Label) "By the door".
+		const add = async ( x: number, label: string, description: string ): Promise< void > => {
+			await clickAt( image, x, 0.5 );
+			const row = rows.last();
+			await row.getByLabel( 'Label' ).fill( label );
+			await row.getByLabel( 'Description' ).fill( description );
+		};
+		await add( 0.2, 'Lamp', 'On the table' );
+		await add( 0.4, '', 'Near the window' );
+		await add( 0.6, 'Rug', 'Under the sofa' );
+		await add( 0.8, '', 'By the door' );
+		await expect( rows ).toHaveCount( 4 );
+
+		await saveBlocked( page );
+		await expect( field.getByText( 'Hotspots 2 and 4 need a Label.' ) ).toBeVisible();
+
+		/**
+		 * Checks which rows say their Hotspot needs a Label, by Description,
+		 * and that each message is wired to the Label input of its own row.
+		 *
+		 * @param expected Description and whether its row is invalid, in list order.
+		 */
+		const expectRows = async ( expected: Array< [ string, boolean ] > ): Promise< void > => {
+			await expect( rows ).toHaveCount( expected.length );
+			for ( const [ index, [ description, invalid ] ] of expected.entries() ) {
+				const row = rows.nth( index );
+				const label = row.getByLabel( 'Label' );
+				await expect( row.getByLabel( 'Description' ) ).toHaveValue( description );
+				await expect( row.getByText( `Hotspot ${ index + 1 }`, { exact: true } ) ).toBeVisible();
+				if ( invalid ) {
+					await expect( row.getByText( rowError ) ).toBeVisible();
+					await expect( label ).toHaveAttribute( 'aria-invalid', 'true' );
+					await expect( label ).toHaveAccessibleDescription( rowError );
+					// The message it points to is the one in its own row.
+					const describedBy = await label.getAttribute( 'aria-describedby' );
+					await expect( row.locator( `[id="${ describedBy }"]` ) ).toHaveText( rowError );
+					await expect( row ).toHaveCSS( 'border-top-style', 'dashed' );
+				} else {
+					await expect( row.getByText( rowError ) ).toBeHidden();
+					await expect( label ).not.toHaveAttribute( 'aria-invalid', 'true' );
+					await expect( label ).not.toHaveAttribute( 'aria-describedby' );
+					await expect( row ).toHaveCSS( 'border-top-style', 'solid' );
+				}
+			}
+			// Every message has an ID of its own.
+			const ids = await field.locator( '.hotspot-field-editor__row-error' ).evaluateAll( ( nodes ) => nodes.map( ( node ) => node.id ) );
+			expect( new Set( ids ).size ).toBe( ids.length );
+		};
+
+		await expectRows( [
+			[ 'On the table', false ],
+			[ 'Near the window', true ],
+			[ 'Under the sofa', false ],
+			[ 'By the door', true ],
+		] );
+
+		await field.getByRole( 'button', { name: 'Move Hotspot 2 up' } ).click();
+		await expectRows( [
+			[ 'Near the window', true ],
+			[ 'On the table', false ],
+			[ 'Under the sofa', false ],
+			[ 'By the door', true ],
+		] );
+		// The field's message numbered the Hotspots as they were: it goes, the rows keep theirs.
+		await expect( field.getByText( 'Hotspots 2 and 4 need a Label.' ) ).toHaveCount( 0 );
+		await expect( field.locator( '.acf-notice.-error' ) ).toHaveCount( 0 );
+
+		await field.getByRole( 'button', { name: 'Move Hotspot 3: Rug down' } ).click();
+		await expectRows( [
+			[ 'Near the window', true ],
+			[ 'On the table', false ],
+			[ 'By the door', true ],
+			[ 'Under the sofa', false ],
+		] );
+
+		await field.getByRole( 'button', { name: 'Remove Hotspot 1', exact: true } ).click();
+		await expectRows( [
+			[ 'On the table', false ],
+			[ 'By the door', true ],
+			[ 'Under the sofa', false ],
+		] );
+
+		// Selected and invalid: the selected row's solid accent on the left, dashed elsewhere.
+		await field.getByRole( 'button', { name: 'Hotspot 2', exact: true } ).focus();
+		await expect( rows.nth( 1 ) ).toHaveAttribute( 'aria-current', 'true' );
+		await expect( rows.nth( 1 ) ).toHaveCSS( 'border-left-style', 'solid' );
+		await expect( rows.nth( 1 ) ).toHaveCSS( 'border-top-style', 'dashed' );
+
+		await rows.nth( 1 ).getByLabel( 'Label' ).fill( 'Door' );
+		await expectRows( [
+			[ 'On the table', false ],
+			[ 'By the door', false ],
+			[ 'Under the sofa', false ],
+		] );
+
+		await save( page );
+		expect( savedHotspots( postId ).map( ( { label, description } ) => [ label, description ] ) ).toEqual( [
+			[ 'Lamp', 'On the table' ],
+			[ 'Door', 'By the door' ],
+			[ 'Rug', 'Under the sofa' ],
+		] );
+	} );
+
 	test( 'a required Hotspot Field with no Hotspots blocks the save', async ( { page } ) => {
 		const postId = createPost( 'required', true );
 		await openEditor( page, postId );
 
 		const field = page.locator( '.acf-field-hotspot' );
-		const image = await waitForImage( field );
+		const image = await loadedImage( field );
 
 		await saveBlocked( page );
 		await expect( field.getByText( 'Add at least one Hotspot to Hotspots.' ) ).toBeVisible();
@@ -164,7 +247,7 @@ test.describe( 'Validating a Hotspot Field on save', () => {
 		await openEditor( page, postId );
 
 		const field = page.locator( '.acf-field-hotspot' );
-		await waitForImage( field );
+		await loadedImage( field );
 
 		await save( page );
 		await expect( field.locator( '.acf-notice.-error' ) ).toHaveCount( 0 );
@@ -172,113 +255,3 @@ test.describe( 'Validating a Hotspot Field on save', () => {
 		expect( savedHotspots( postId ) ).toEqual( [] );
 	} );
 } );
-
-/**
- * Opens a post in the block editor, without the welcome guide.
- *
- * @param page   Playwright page.
- * @param postId Post ID.
- */
-async function openEditor( page: Page, postId: number ): Promise< void > {
-	await page.goto( `/wp-admin/post.php?post=${ postId }&action=edit` );
-	await page.waitForFunction( () => ( window as any ).wp?.data?.select( 'core/editor' )?.getCurrentPostId() );
-	await page.evaluate( () => ( window as any ).wp.data.dispatch( 'core/preferences' ).set( 'core/edit-post', 'welcomeGuide', false ) );
-
-	// ACF's fields live in the meta box pane under the content; open it.
-	const metaBoxes = page.getByRole( 'region', { name: 'Meta Boxes' } ).getByRole( 'button', { name: 'Meta Boxes' } );
-	if ( ( await metaBoxes.count() ) && ( await metaBoxes.getAttribute( 'aria-expanded' ) ) === 'false' ) {
-		// The resize handle covers the middle of the toggle: use the keyboard.
-		await metaBoxes.press( 'Enter' );
-		await expect( metaBoxes ).toHaveAttribute( 'aria-expanded', 'true' );
-	}
-	await page.locator( '.acf-field-hotspot' ).scrollIntoViewIfNeeded();
-}
-
-/**
- * Waits until the Hotspot Field shows its image, loaded.
- *
- * @param field Hotspot Field.
- * @return The image.
- */
-async function waitForImage( field: Locator ): Promise< Locator > {
-	const image = field.getByRole( 'img', { name: 'Image to place Hotspots on' } );
-	await expect( image ).toBeVisible();
-	await expect.poll( () => image.evaluate( ( img: HTMLImageElement ) => img.complete && img.naturalWidth > 0 ) ).toBe( true );
-	return image;
-}
-
-/**
- * Clicks an element at a fraction of its width and height.
- *
- * @param locator Element.
- * @param x       Fraction of the width.
- * @param y       Fraction of the height.
- */
-async function clickAt( locator: Locator, x: number, y: number ): Promise< void > {
-	const box = await locator.boundingBox();
-	expect( box ).not.toBeNull();
-	await locator.click( { position: { x: box!.width * x, y: box!.height * y } } );
-}
-
-/**
- * Clicks the block editor's save button.
- *
- * @param page Playwright page.
- */
-async function clickSave( page: Page ): Promise< void > {
-	await page.getByRole( 'region', { name: 'Editor top bar' } ).getByRole( 'button', { name: /^(Save draft|Save|Update)$/ } ).click();
-}
-
-/**
- * Clicks save when ACF's validation is expected to fail, and waits until the
- * save has settled: ACF answered the validation request and the editor is no
- * longer saving. Fails if the meta boxes (ACF's fields) were saved anyway.
- *
- * @param page Playwright page.
- */
-async function saveBlocked( page: Page ): Promise< void > {
-	const metaBoxSaves: string[] = [];
-	const onRequest = ( request: Request ): void => {
-		if ( request.url().includes( 'meta-box-loader=1' ) && request.method() === 'POST' ) {
-			metaBoxSaves.push( request.url() );
-		}
-	};
-	page.on( 'request', onRequest );
-
-	try {
-		const validated = page.waitForResponse(
-			( response ) =>
-				response.url().includes( 'admin-ajax.php' ) &&
-				response.request().method() === 'POST' &&
-				( response.request().postData() ?? '' ).includes( 'action=acf%2Fvalidate_save_post' )
-		);
-		await clickSave( page );
-		const response = await validated;
-		expect( response.status() ).toBeLessThan( 400 );
-		expect( ( await response.json() ).data?.valid, 'ACF accepted the content' ).toBeFalsy();
-
-		await expect( page.getByText( /Validation failed/ ).first() ).toBeVisible();
-		await page.waitForFunction( () => {
-			const editor = ( window as any ).wp.data.select( 'core/editor' );
-			return ! editor.isSavingPost() && ! editor.isAutosavingPost();
-		} );
-	} finally {
-		page.off( 'request', onRequest );
-	}
-
-	expect( metaBoxSaves, 'the meta boxes were saved despite the failed validation' ).toEqual( [] );
-}
-
-/**
- * Saves the post in the block editor and waits for ACF's meta boxes to save.
- *
- * @param page Playwright page.
- */
-async function save( page: Page ): Promise< void > {
-	const metaBoxesSaved = page.waitForResponse(
-		( response ) => response.url().includes( 'meta-box-loader=1' ) && response.request().method() === 'POST'
-	);
-	await clickSave( page );
-	const response = await metaBoxesSaved;
-	expect( response.status(), `meta box save answered ${ response.status() } ${ response.url() }` ).toBeLessThan( 400 );
-}

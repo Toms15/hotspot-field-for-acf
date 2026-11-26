@@ -62,7 +62,7 @@ class Hotspot_Field extends \acf_field {
 			esc_attr( $field['linked_image_field'] ?? '' ),
 			esc_attr( $field['name'] ),
 			esc_attr( (string) wp_json_encode( Hotspot_Value::normalize( $field['value'] ?? array() ) ) ),
-			esc_html__( 'Click the image to add a Hotspot.', 'hotspot-field-for-acf' )
+			esc_html__( 'Click the image to add a Hotspot. Drag a marker to move it, or select it and use the arrow keys (hold Shift for larger steps).', 'hotspot-field-for-acf' )
 		);
 	}
 
@@ -95,6 +95,21 @@ class Hotspot_Field extends \acf_field {
 				'label'        => __( 'Label', 'hotspot-field-for-acf' ),
 				'description'  => __( 'Description', 'hotspot-field-for-acf' ),
 				'missingLabel' => __( 'This Hotspot needs a Label.', 'hotspot-field-for-acf' ),
+				'up'           => __( 'Up', 'hotspot-field-for-acf' ),
+				'down'         => __( 'Down', 'hotspot-field-for-acf' ),
+				'removeText'   => __( 'Remove', 'hotspot-field-for-acf' ),
+				/* translators: %s: name of the Hotspot, such as "Hotspot 1: Lamp". */
+				'moveUp'       => __( 'Move %s up', 'hotspot-field-for-acf' ),
+				/* translators: %s: name of the Hotspot, such as "Hotspot 1: Lamp". */
+				'moveDown'     => __( 'Move %s down', 'hotspot-field-for-acf' ),
+				/* translators: %s: name of the Hotspot, such as "Hotspot 1: Lamp". */
+				'remove'       => __( 'Remove %s', 'hotspot-field-for-acf' ),
+				/* translators: 1: name of the Hotspot, such as "Hotspot 1: Lamp"; 2: distance from the image's left edge, such as "51%"; 3: distance from its top edge. */
+				'position'     => __( '%1$s, %2$s across, %3$s down', 'hotspot-field-for-acf' ),
+				/* translators: 1: name the Hotspot had before it moved, such as "Hotspot 3: Lamp"; 2: its new place in the list; 3: number of Hotspots. */
+				'reordered'    => __( '%1$s moved to position %2$s of %3$s.', 'hotspot-field-for-acf' ),
+				/* translators: %s: name of the removed Hotspot, such as "Hotspot 1: Lamp". */
+				'removed'      => __( '%s removed.', 'hotspot-field-for-acf' ),
 			)
 		);
 	}

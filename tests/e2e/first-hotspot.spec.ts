@@ -1,33 +1,5 @@
-import { execFileSync } from 'node:child_process';
-import { expect, test, type Locator, type Page } from '@playwright/test';
-
-/**
- * Runs WP-CLI in wp-env and returns what the command printed.
- *
- * @param args WP-CLI arguments.
- */
-function wp( ...args: string[] ): string {
-	return execFileSync( 'npx', [ 'wp-env', 'run', 'cli', 'wp', ...args ], {
-		encoding: 'utf8',
-		stdio: [ 'ignore', 'pipe', 'ignore' ],
-	} ).trim();
-}
-
-/**
- * Runs PHP in WordPress and returns the JSON it printed between markers.
- *
- * @param php PHP code that assigns the result to `$result`.
- */
-function wpEval< T >( php: string ): T {
-	const output = wp( 'eval', `${ php } echo '<<<', wp_json_encode( $result ), '>>>';` );
-	const match = output.match( /<<<([\s\S]*)>>>/ );
-	if ( ! match ) {
-		throw new Error( `WP-CLI printed no result: ${ output }` );
-	}
-	return JSON.parse( match[ 1 ] ) as T;
-}
-
-type Hotspot = { x: number; y: number; label: string; description: string };
+import { expect, test } from '@playwright/test';
+import { clickAt, loadedImage, openEditor, save, wp, wpEval, type Hotspot } from './helpers';
 
 const suffix = Date.now();
 const fieldGroupKey = `group_e2e_first_hotspot_${ suffix }`;
@@ -86,16 +58,15 @@ test.describe( 'First Hotspot in a field group', () => {
 		await openEditor( page, postId );
 
 		const field = page.locator( '.acf-field-hotspot' );
-		const image = field.getByRole( 'img', { name: 'Image to place Hotspots on' } );
-		await expect( image ).toBeVisible();
-		await expect.poll( () => image.evaluate( ( img: HTMLImageElement ) => img.complete && img.naturalWidth > 0 ) ).toBe( true );
+		const image = await loadedImage( field );
 
 		// First Hotspot: click at 25% / 50% of the image.
 		await clickAt( image, 0.25, 0.5 );
 		const rows = field.getByRole( 'listitem' );
 		await expect( rows ).toHaveCount( 1 );
-		await expect( field.getByRole( 'button', { name: 'Hotspot 1' } ) ).toBeVisible();
-		await expect( rows.nth( 0 ) ).toHaveClass( /is-selected/ );
+		await expect( field.getByRole( 'button', { name: 'Hotspot 1', exact: true } ) ).toBeVisible();
+		await expect( field.getByRole( 'button', { name: 'Hotspot 1', exact: true } ) ).toHaveAttribute( 'aria-current', 'true' );
+		await expect( rows.nth( 0 ) ).toHaveAttribute( 'aria-current', 'true' );
 		await expect( rows.nth( 0 ).getByLabel( 'Label' ) ).toBeFocused();
 		await page.keyboard.type( 'Lamp' );
 		await rows.nth( 0 ).getByLabel( 'Description' ).fill( 'A brass lamp.\nSecond line.' );
@@ -103,13 +74,13 @@ test.describe( 'First Hotspot in a field group', () => {
 		// Second Hotspot: appended to the list and selected.
 		await clickAt( image, 0.75, 0.2 );
 		await expect( rows ).toHaveCount( 2 );
-		await expect( rows.nth( 1 ) ).toHaveClass( /is-selected/ );
-		await expect( rows.nth( 0 ) ).not.toHaveClass( /is-selected/ );
+		await expect( rows.nth( 1 ) ).toHaveAttribute( 'aria-current', 'true' );
+		await expect( rows.nth( 0 ) ).not.toHaveAttribute( 'aria-current' );
 		await expect( rows.nth( 1 ).getByLabel( 'Label' ) ).toBeFocused();
 		await rows.nth( 1 ).getByLabel( 'Label' ).fill( 'Chair' );
 
-		await expect( field.getByRole( 'button', { name: 'Hotspot 1: Lamp' } ) ).toBeVisible();
-		await expect( field.getByRole( 'button', { name: 'Hotspot 2: Chair' } ) ).toBeVisible();
+		await expect( field.getByRole( 'button', { name: 'Hotspot 1: Lamp', exact: true } ) ).toBeVisible();
+		await expect( field.getByRole( 'button', { name: 'Hotspot 2: Chair', exact: true } ) ).toBeVisible();
 
 		await save( page );
 
@@ -158,51 +129,3 @@ test.describe( 'First Hotspot in a field group', () => {
 		}
 	} );
 } );
-
-/**
- * Opens a post in the block editor, without the welcome guide.
- *
- * @param page   Playwright page.
- * @param postId Post ID.
- */
-async function openEditor( page: Page, postId: number ): Promise< void > {
-	await page.goto( `/wp-admin/post.php?post=${ postId }&action=edit` );
-	await page.waitForFunction( () => ( window as any ).wp?.data?.select( 'core/editor' )?.getCurrentPostId() );
-	await page.evaluate( () => ( window as any ).wp.data.dispatch( 'core/preferences' ).set( 'core/edit-post', 'welcomeGuide', false ) );
-
-	// ACF's fields live in the meta box pane under the content; open it.
-	const metaBoxes = page.getByRole( 'region', { name: 'Meta Boxes' } ).getByRole( 'button', { name: 'Meta Boxes' } );
-	if ( ( await metaBoxes.count() ) && ( await metaBoxes.getAttribute( 'aria-expanded' ) ) === 'false' ) {
-		// The resize handle covers the middle of the toggle: use the keyboard.
-		await metaBoxes.press( 'Enter' );
-		await expect( metaBoxes ).toHaveAttribute( 'aria-expanded', 'true' );
-	}
-	await page.locator( '.acf-field-hotspot' ).scrollIntoViewIfNeeded();
-}
-
-/**
- * Clicks an element at a fraction of its width and height.
- *
- * @param locator Element.
- * @param x       Fraction of the width.
- * @param y       Fraction of the height.
- */
-async function clickAt( locator: Locator, x: number, y: number ): Promise< void > {
-	const box = await locator.boundingBox();
-	expect( box ).not.toBeNull();
-	await locator.click( { position: { x: box!.width * x, y: box!.height * y } } );
-}
-
-/**
- * Saves the post in the block editor and waits for ACF's meta boxes to save.
- *
- * @param page Playwright page.
- */
-async function save( page: Page ): Promise< void > {
-	const metaBoxesSaved = page.waitForResponse(
-		( response ) => response.url().includes( 'meta-box-loader=1' ) && response.request().method() === 'POST'
-	);
-	await page.getByRole( 'region', { name: 'Editor top bar' } ).getByRole( 'button', { name: /^(Save draft|Save|Update)$/ } ).click();
-	const response = await metaBoxesSaved;
-	expect( response.status(), `meta box save answered ${ response.status() } ${ response.url() }` ).toBeLessThan( 400 );
-}
