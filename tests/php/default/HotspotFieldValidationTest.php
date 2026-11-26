@@ -101,6 +101,18 @@ class HotspotFieldValidationTest extends Hotspot_Field_Test_Case {
 	}
 
 	/**
+	 * Without a field label, the message for a required Hotspot Field still
+	 * reads well.
+	 */
+	public function test_required_field_without_label_has_a_message_that_reads_well(): void {
+		$field          = $this->field( true );
+		$field['label'] = '';
+
+		$this->assertFalse( acf_validate_value( wp_slash( wp_json_encode( array() ) ), $field, self::INPUT ) );
+		$this->assertSame( array( 'Add at least one Hotspot.' ), $this->errors() );
+	}
+
+	/**
 	 * A required Hotspot Field with Hotspots saves.
 	 */
 	public function test_required_field_with_hotspots_is_valid(): void {

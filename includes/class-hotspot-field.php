@@ -125,10 +125,16 @@ class Hotspot_Field extends \acf_field {
 				return $valid;
 			}
 
+			$field_label = trim( (string) ( $field['label'] ?? '' ) );
+
+			if ( '' === $field_label ) {
+				return __( 'Add at least one Hotspot.', 'hotspot-field-for-acf' );
+			}
+
 			return sprintf(
 				/* translators: %s: label of the Hotspot Field. */
 				__( 'Add at least one Hotspot to %s.', 'hotspot-field-for-acf' ),
-				$field['label']
+				$field_label
 			);
 		}
 

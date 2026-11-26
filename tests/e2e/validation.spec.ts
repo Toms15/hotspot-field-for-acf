@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Request } from '@playwright/test';
 
 /**
  * Runs WP-CLI in wp-env and returns what the command printed.
@@ -115,7 +115,7 @@ test.describe( 'Validating a Hotspot Field on save', () => {
 		await clickAt( image, 0.75, 0.2 );
 		await expect( rows ).toHaveCount( 2 );
 
-		await clickSave( page );
+		await saveBlocked( page );
 		await expect( field.getByText( 'Hotspot 2 needs a Label.' ) ).toBeVisible();
 		await expect( page.getByText( /Validation failed/ ).first() ).toBeVisible();
 
@@ -125,6 +125,10 @@ test.describe( 'Validating a Hotspot Field on save', () => {
 		await expect( missing ).toHaveAccessibleDescription( rowError );
 		await expect( rows.nth( 0 ).getByText( rowError ) ).toBeHidden();
 		await expect( rows.nth( 0 ).getByLabel( 'Label' ) ).not.toHaveAttribute( 'aria-invalid', 'true' );
+
+		// The invalid row does not look like the selected one: its whole border is dashed.
+		await expect( rows.nth( 1 ) ).toHaveCSS( 'border-top-style', 'dashed' );
+		await expect( rows.nth( 0 ) ).toHaveCSS( 'border-top-style', 'solid' );
 
 		expect( isSaved( postId ), 'the blocked save stored Hotspots' ).toBe( false );
 
@@ -144,7 +148,7 @@ test.describe( 'Validating a Hotspot Field on save', () => {
 		const field = page.locator( '.acf-field-hotspot' );
 		const image = await waitForImage( field );
 
-		await clickSave( page );
+		await saveBlocked( page );
 		await expect( field.getByText( 'Add at least one Hotspot to Hotspots.' ) ).toBeVisible();
 		await expect( page.getByText( /Validation failed/ ).first() ).toBeVisible();
 		expect( isSaved( postId ), 'the blocked save stored Hotspots' ).toBe( false );
@@ -223,6 +227,46 @@ async function clickAt( locator: Locator, x: number, y: number ): Promise< void 
  */
 async function clickSave( page: Page ): Promise< void > {
 	await page.getByRole( 'region', { name: 'Editor top bar' } ).getByRole( 'button', { name: /^(Save draft|Save|Update)$/ } ).click();
+}
+
+/**
+ * Clicks save when ACF's validation is expected to fail, and waits until the
+ * save has settled: ACF answered the validation request and the editor is no
+ * longer saving. Fails if the meta boxes (ACF's fields) were saved anyway.
+ *
+ * @param page Playwright page.
+ */
+async function saveBlocked( page: Page ): Promise< void > {
+	const metaBoxSaves: string[] = [];
+	const onRequest = ( request: Request ): void => {
+		if ( request.url().includes( 'meta-box-loader=1' ) && request.method() === 'POST' ) {
+			metaBoxSaves.push( request.url() );
+		}
+	};
+	page.on( 'request', onRequest );
+
+	try {
+		const validated = page.waitForResponse(
+			( response ) =>
+				response.url().includes( 'admin-ajax.php' ) &&
+				response.request().method() === 'POST' &&
+				( response.request().postData() ?? '' ).includes( 'action=acf%2Fvalidate_save_post' )
+		);
+		await clickSave( page );
+		const response = await validated;
+		expect( response.status() ).toBeLessThan( 400 );
+		expect( ( await response.json() ).data?.valid, 'ACF accepted the content' ).toBeFalsy();
+
+		await expect( page.getByText( /Validation failed/ ).first() ).toBeVisible();
+		await page.waitForFunction( () => {
+			const editor = ( window as any ).wp.data.select( 'core/editor' );
+			return ! editor.isSavingPost() && ! editor.isAutosavingPost();
+		} );
+	} finally {
+		page.off( 'request', onRequest );
+	}
+
+	expect( metaBoxSaves, 'the meta boxes were saved despite the failed validation' ).toEqual( [] );
 }
 
 /**
