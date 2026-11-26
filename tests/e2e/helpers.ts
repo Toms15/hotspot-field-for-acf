@@ -1,33 +1,8 @@
-import { execFileSync } from 'node:child_process';
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page, type Request } from '@playwright/test';
+
+export { wp, wpEval } from './wp-cli';
 
 export type Hotspot = { x: number; y: number; label: string; description: string };
-
-/**
- * Runs WP-CLI in wp-env and returns what the command printed.
- *
- * @param args WP-CLI arguments.
- */
-export function wp( ...args: string[] ): string {
-	return execFileSync( 'npx', [ 'wp-env', 'run', 'cli', 'wp', ...args ], {
-		encoding: 'utf8',
-		stdio: [ 'ignore', 'pipe', 'ignore' ],
-	} ).trim();
-}
-
-/**
- * Runs PHP in WordPress and returns the JSON it printed between markers.
- *
- * @param php PHP code that assigns the result to `$result`.
- */
-export function wpEval< T >( php: string ): T {
-	const output = wp( 'eval', `${ php } echo '<<<', wp_json_encode( $result ), '>>>';` );
-	const match = output.match( /<<<([\s\S]*)>>>/ );
-	if ( ! match ) {
-		throw new Error( `WP-CLI printed no result: ${ output }` );
-	}
-	return JSON.parse( match[ 1 ] ) as T;
-}
 
 /**
  * Opens a post in the block editor, without the welcome guide.
@@ -76,6 +51,15 @@ export async function clickAt( locator: Locator, x: number, y: number ): Promise
 }
 
 /**
+ * Clicks the block editor's save button.
+ *
+ * @param page Playwright page.
+ */
+async function clickSave( page: Page ): Promise< void > {
+	await page.getByRole( 'region', { name: 'Editor top bar' } ).getByRole( 'button', { name: /^(Save draft|Save|Update)$/ } ).click();
+}
+
+/**
  * Saves the post in the block editor and waits for ACF's meta boxes to save.
  *
  * @param page Playwright page.
@@ -84,7 +68,47 @@ export async function save( page: Page ): Promise< void > {
 	const metaBoxesSaved = page.waitForResponse(
 		( response ) => response.url().includes( 'meta-box-loader=1' ) && response.request().method() === 'POST'
 	);
-	await page.getByRole( 'region', { name: 'Editor top bar' } ).getByRole( 'button', { name: /^(Save draft|Save|Update)$/ } ).click();
+	await clickSave( page );
 	const response = await metaBoxesSaved;
 	expect( response.status(), `meta box save answered ${ response.status() } ${ response.url() }` ).toBeLessThan( 400 );
+}
+
+/**
+ * Clicks save when ACF's validation is expected to fail, and waits until the
+ * save has settled: ACF answered the validation request and the editor is no
+ * longer saving. Fails if the meta boxes (ACF's fields) were saved anyway.
+ *
+ * @param page Playwright page.
+ */
+export async function saveBlocked( page: Page ): Promise< void > {
+	const metaBoxSaves: string[] = [];
+	const onRequest = ( request: Request ): void => {
+		if ( request.url().includes( 'meta-box-loader=1' ) && request.method() === 'POST' ) {
+			metaBoxSaves.push( request.url() );
+		}
+	};
+	page.on( 'request', onRequest );
+
+	try {
+		const validated = page.waitForResponse(
+			( response ) =>
+				response.url().includes( 'admin-ajax.php' ) &&
+				response.request().method() === 'POST' &&
+				( response.request().postData() ?? '' ).includes( 'action=acf%2Fvalidate_save_post' )
+		);
+		await clickSave( page );
+		const response = await validated;
+		expect( response.status() ).toBeLessThan( 400 );
+		expect( ( await response.json() ).data?.valid, 'ACF accepted the content' ).toBeFalsy();
+
+		await expect( page.getByText( /Validation failed/ ).first() ).toBeVisible();
+		await page.waitForFunction( () => {
+			const editor = ( window as any ).wp.data.select( 'core/editor' );
+			return ! editor.isSavingPost() && ! editor.isAutosavingPost();
+		} );
+	} finally {
+		page.off( 'request', onRequest );
+	}
+
+	expect( metaBoxSaves, 'the meta boxes were saved despite the failed validation' ).toEqual( [] );
 }
