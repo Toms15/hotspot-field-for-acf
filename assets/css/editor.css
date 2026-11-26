@@ -45,13 +45,26 @@
 	font-size: 12px;
 	font-weight: 600;
 	line-height: 20px;
+	cursor: grab;
 	pointer-events: auto;
+	touch-action: none;
 	transform: translate(-50%, -50%);
 }
 
-.hotspot-field-editor__marker.is-selected {
+.hotspot-field-editor__marker:active {
+	cursor: grabbing;
+}
+
+.hotspot-field-editor__marker[aria-current="true"] {
 	background: #d63638;
+	outline: 2px solid #d63638;
+	outline-offset: 1px;
+}
+
+.hotspot-field-editor__marker:focus-visible {
 	outline: 2px solid #1d2327;
+	outline-offset: 2px;
+	box-shadow: 0 0 0 4px #fff;
 }
 
 .hotspot-field-editor__list {
@@ -75,13 +88,20 @@
 	border-left: 4px solid #dcdcde;
 }
 
-.hotspot-field-editor__row.is-selected {
+.hotspot-field-editor__row[aria-current="true"] {
 	border-left-color: #d63638;
 }
 
 .hotspot-field-editor__row-title {
 	grid-column: 1 / -1;
 	font-weight: 600;
+}
+
+.hotspot-field-editor__row-actions {
+	display: flex;
+	grid-column: 1 / -1;
+	gap: 4px;
+	justify-content: flex-end;
 }
 
 .hotspot-field-editor__row label {
