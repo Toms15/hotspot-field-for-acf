@@ -104,6 +104,12 @@ class Hotspot_Field extends \acf_field {
 				'moveDown'     => __( 'Move %s down', 'hotspot-field-for-acf' ),
 				/* translators: %s: name of the Hotspot, such as "Hotspot 1: Lamp". */
 				'remove'       => __( 'Remove %s', 'hotspot-field-for-acf' ),
+				/* translators: 1: name of the Hotspot, such as "Hotspot 1: Lamp"; 2: distance from the image's left edge, such as "51%"; 3: distance from its top edge. */
+				'position'     => __( '%1$s, %2$s across, %3$s down', 'hotspot-field-for-acf' ),
+				/* translators: 1: name the Hotspot had before it moved, such as "Hotspot 3: Lamp"; 2: its new place in the list; 3: number of Hotspots. */
+				'reordered'    => __( '%1$s moved to position %2$s of %3$s.', 'hotspot-field-for-acf' ),
+				/* translators: %s: name of the removed Hotspot, such as "Hotspot 1: Lamp". */
+				'removed'      => __( '%s removed.', 'hotspot-field-for-acf' ),
 			)
 		);
 	}

@@ -34,12 +34,17 @@ function savedHotspots(): Hotspot[] {
  */
 async function expectVisibleFocus( locator: Locator ): Promise< void > {
 	await expect( locator ).toBeFocused();
-	const indicator = await locator.evaluate( ( node ) => {
-		const style = getComputedStyle( node );
-		const outline = style.outlineStyle !== 'none' && parseFloat( style.outlineWidth ) > 0 && style.outlineColor !== 'rgba(0, 0, 0, 0)';
-		return outline || style.boxShadow !== 'none';
-	} );
-	expect( indicator, 'focused element has an outline or a focus ring' ).toBe( true );
+	await expect
+		.poll(
+			() =>
+				locator.evaluate( ( node ) => {
+					const style = getComputedStyle( node );
+					const outline = style.outlineStyle !== 'none' && parseFloat( style.outlineWidth ) > 0 && style.outlineColor !== 'rgba(0, 0, 0, 0)';
+					return outline || style.boxShadow !== 'none';
+				} ),
+			{ message: 'focused element has an outline or a focus ring' }
+		)
+		.toBe( true );
 }
 
 /**
@@ -208,10 +213,10 @@ test.describe( 'Managing Hotspots in the editor', () => {
 		await page.keyboard.press( 'ArrowRight' );
 		await page.keyboard.press( 'ArrowRight' );
 		await page.keyboard.press( 'ArrowUp' );
-		expect( await first.evaluate( ( node: HTMLElement ) => [ node.style.left, node.style.top ] ) ).toEqual( [ '51%', '49.5%' ] );
+		await expect.poll( () => first.evaluate( ( node: HTMLElement ) => [ node.style.left, node.style.top ] ) ).toEqual( [ '51%', '49.5%' ] );
 		await page.keyboard.press( 'Shift+ArrowLeft' );
 		await page.keyboard.press( 'Shift+ArrowDown' );
-		expect( await first.evaluate( ( node: HTMLElement ) => [ node.style.left, node.style.top ] ) ).toEqual( [ '46%', '54.5%' ] );
+		await expect.poll( () => first.evaluate( ( node: HTMLElement ) => [ node.style.left, node.style.top ] ) ).toEqual( [ '46%', '54.5%' ] );
 
 		// Keys never move a Hotspot off the image.
 		const second = marker( 'Hotspot 2: B' );
@@ -222,7 +227,7 @@ test.describe( 'Managing Hotspots in the editor', () => {
 			await page.keyboard.press( 'ArrowLeft' );
 		}
 		await page.keyboard.press( 'Shift+ArrowDown' );
-		expect( await second.evaluate( ( node: HTMLElement ) => [ node.style.left, node.style.top ] ) ).toEqual( [ '0%', '100%' ] );
+		await expect.poll( () => second.evaluate( ( node: HTMLElement ) => [ node.style.left, node.style.top ] ) ).toEqual( [ '0%', '100%' ] );
 		await expect( second ).toBeFocused();
 
 		await save( page );
@@ -241,7 +246,7 @@ test.describe( 'Managing Hotspots in the editor', () => {
 
 		await field.getByRole( 'button', { name: 'Remove Hotspot 2: B', exact: true } ).click();
 		await expect( rows ).toHaveCount( 2 );
-		expect( await rowLabels( rows ) ).toEqual( [ 'A', 'C' ] );
+		await expect.poll( () => rowLabels( rows ) ).toEqual( [ 'A', 'C' ] );
 		await expect( marker( 'Hotspot 1: A' ) ).toBeVisible();
 		await expect( marker( 'Hotspot 2: C' ) ).toBeVisible();
 		await expect( field.getByRole( 'button', { name: /^Hotspot \d+/ } ) ).toHaveCount( 2 );
@@ -286,7 +291,7 @@ test.describe( 'Managing Hotspots in the editor', () => {
 		await expect( down( 'Hotspot 3: C' ) ).toBeDisabled();
 
 		await up( 'Hotspot 3: C' ).click();
-		expect( await rowLabels( rows ) ).toEqual( [ 'A', 'C', 'B' ] );
+		await expect.poll( () => rowLabels( rows ) ).toEqual( [ 'A', 'C', 'B' ] );
 		// The moved Hotspot stays selected and keeps focus on the same control.
 		await expect( up( 'Hotspot 2: C' ) ).toBeFocused();
 		await expect( rows.nth( 1 ) ).toHaveAttribute( 'aria-current', 'true' );
@@ -297,7 +302,7 @@ test.describe( 'Managing Hotspots in the editor', () => {
 		// By keyboard: moving C to the top disables its Up button, so focus
 		// moves to its Down button.
 		await page.keyboard.press( 'Enter' );
-		expect( await rowLabels( rows ) ).toEqual( [ 'C', 'A', 'B' ] );
+		await expect.poll( () => rowLabels( rows ) ).toEqual( [ 'C', 'A', 'B' ] );
 		await expect( up( 'Hotspot 1: C' ) ).toBeDisabled();
 		await expect( down( 'Hotspot 1: C' ) ).toBeFocused();
 		await expect( up( 'Hotspot 2: A' ) ).toBeEnabled();
@@ -308,7 +313,7 @@ test.describe( 'Managing Hotspots in the editor', () => {
 		expect( Math.abs( moved.y - 80 ) ).toBeLessThan( 1 );
 
 		await page.keyboard.press( ' ' );
-		expect( await rowLabels( rows ) ).toEqual( [ 'A', 'C', 'B' ] );
+		await expect.poll( () => rowLabels( rows ) ).toEqual( [ 'A', 'C', 'B' ] );
 
 		await save( page );
 		expect( savedHotspots() ).toEqual( [
@@ -320,7 +325,7 @@ test.describe( 'Managing Hotspots in the editor', () => {
 		// Reopening the post shows the saved order.
 		await openEditor( page, postId );
 		await expect( rows ).toHaveCount( 3 );
-		expect( await rowLabels( rows ) ).toEqual( [ 'A', 'C', 'B' ] );
+		await expect.poll( () => rowLabels( rows ) ).toEqual( [ 'A', 'C', 'B' ] );
 	} );
 
 	test( 'every control is reachable by keyboard, shows its focus and is named after its Hotspot', async ( { page: testPage } ) => {
@@ -368,5 +373,161 @@ test.describe( 'Managing Hotspots in the editor', () => {
 		await rows.nth( 1 ).getByLabel( 'Label' ).fill( '' );
 		await expect( marker( 'Hotspot 2' ) ).toBeVisible();
 		await expect( field.getByRole( 'button', { name: 'Remove Hotspot 2', exact: true } ) ).toBeVisible();
+	} );
+	test( 'moves, reorders and removals are announced to screen readers, once per move', async ( { page: testPage } ) => {
+		await start( testPage, [
+			{ x: 50, y: 50, label: 'A' },
+			{ x: 20, y: 20, label: 'B' },
+			{ x: 80, y: 80, label: 'C' },
+		] );
+
+		const status = field.getByRole( 'status' );
+		await expect( status ).toHaveCount( 1 );
+		await expect( status ).toHaveText( '' );
+
+		// Record every message the live region gets.
+		await status.evaluate( ( node ) => {
+			( window as any ).hotspotAnnouncements = [];
+			new MutationObserver( () => {
+				if ( node.textContent ) {
+					( window as any ).hotspotAnnouncements.push( node.textContent );
+				}
+			} ).observe( node, { childList: true, characterData: true, subtree: true } );
+		} );
+		const announcements = () => page.evaluate( () => ( window as any ).hotspotAnnouncements as string[] );
+
+		// A burst of key presses, like a held key, is announced once, with
+		// where the Hotspot ends up.
+		await marker( 'Hotspot 1: A' ).focus();
+		await page.keyboard.press( 'ArrowRight' );
+		await page.keyboard.press( 'ArrowRight' );
+		await page.keyboard.press( 'ArrowRight' );
+		await page.keyboard.press( 'Shift+ArrowUp' );
+		await expect( status ).toHaveText( 'Hotspot 1: A, 51.5% across, 45% down' );
+		await expect.poll( announcements ).toEqual( [ 'Hotspot 1: A, 51.5% across, 45% down' ] );
+
+		// Reordering says where the Hotspot went.
+		await field.getByRole( 'button', { name: 'Move Hotspot 3: C up', exact: true } ).click();
+		await expect( status ).toHaveText( 'Hotspot 3: C moved to position 2 of 3.' );
+
+		// Removing says which Hotspot was removed.
+		await field.getByRole( 'button', { name: 'Remove Hotspot 1: A', exact: true } ).click();
+		await expect( status ).toHaveText( 'Hotspot 1: A removed.' );
+
+		await expect.poll( announcements ).toEqual( [
+			'Hotspot 1: A, 51.5% across, 45% down',
+			'Hotspot 3: C moved to position 2 of 3.',
+			'Hotspot 1: A removed.',
+		] );
+	} );
+
+	test( 'markers keep their size but can be grabbed within a 44px target, and the nearer marker wins', async ( { page: testPage } ) => {
+		await start( testPage, [ { x: 50, y: 50, label: 'A' } ] );
+
+		const first = marker( 'Hotspot 1: A' );
+		// The visible marker stays 24px.
+		await expect.poll( async () => ( await first.boundingBox() )?.height ).toBe( 24 );
+		await expect.poll( async () => ( await first.boundingBox() )?.width ).toBe( 24 );
+
+		// Pressing 20px from the centre, outside the visible marker, grabs it
+		// instead of adding a Hotspot; dragging from there moves it.
+		const box = ( await first.boundingBox() )!;
+		const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+		await page.mouse.move( centre.x + 20, centre.y );
+		await page.mouse.down();
+		await page.mouse.move( centre.x + 60, centre.y, { steps: 5 } );
+		await page.mouse.up();
+		await expect( rows ).toHaveCount( 1 );
+		await expect( first ).toHaveAttribute( 'aria-current', 'true' );
+		await expect.poll( async () => Math.round( ( await first.boundingBox() )!.x - box.x ) ).toBe( 40 );
+
+		// Pressing 20px above or below the centre grabs it too.
+		for ( const dy of [ -20, 20 ] ) {
+			const now = ( await first.boundingBox() )!;
+			await page.mouse.click( now.x + now.width / 2, now.y + now.height / 2 + dy );
+			await expect( rows ).toHaveCount( 1 );
+		}
+
+		// Two markers 16px apart: their targets overlap, but pressing on the
+		// visible part of the first one grabs the first one, even where the
+		// second one's target lies over it.
+		const imageBox = ( await image.boundingBox() )!;
+		const apart = ( 16 / imageBox.width ) * 100;
+		await start( testPage, [
+			{ x: 50, y: 50, label: 'A' },
+			{ x: 50 + apart, y: 50, label: 'B' },
+		] );
+		const a = ( await marker( 'Hotspot 1: A' ).boundingBox() )!;
+		const aCentre = { x: a.x + a.width / 2, y: a.y + a.height / 2 };
+		await page.mouse.move( aCentre.x + 2, aCentre.y );
+		await page.mouse.down();
+		await page.mouse.move( aCentre.x + 2, aCentre.y + 50, { steps: 5 } );
+		await page.mouse.up();
+		await expect( marker( 'Hotspot 1: A' ) ).toHaveAttribute( 'aria-current', 'true' );
+		await expect( marker( 'Hotspot 2: B' ) ).not.toHaveAttribute( 'aria-current' );
+		await expect.poll( async () => Math.round( ( await marker( 'Hotspot 1: A' ).boundingBox() )!.y - a.y ) ).toBe( 50 );
+		await expect.poll( async () => Math.round( ( await marker( 'Hotspot 2: B' ).boundingBox() )!.y - a.y ) ).toBe( 0 );
+
+		// And the second marker is still grabbed where only it is visible.
+		const b = ( await marker( 'Hotspot 2: B' ).boundingBox() )!;
+		await page.mouse.click( b.x + b.width - 2, b.y + b.height / 2 );
+		await expect( marker( 'Hotspot 2: B' ) ).toHaveAttribute( 'aria-current', 'true' );
+		await expect( rows ).toHaveCount( 2 );
+
+		await save( page );
+		const saved = savedHotspots();
+		expect( saved ).toHaveLength( 2 );
+		expect( saved[ 1 ] ).toEqual( { x: Math.round( ( 50 + apart ) * 100 ) / 100, y: 50, label: 'B', description: '' } );
+	} );
+
+	test( 'a cancelled drag, by the browser or with Escape, puts the marker back where it was', async ( { page: testPage } ) => {
+		await start( testPage, [
+			{ x: 30, y: 40, label: 'A' },
+			{ x: 80, y: 80, label: 'B' },
+		] );
+
+		const dragged = marker( 'Hotspot 1: A' );
+		const style = () => dragged.evaluate( ( node: HTMLElement ) => [ node.style.left, node.style.top ] );
+		const imageBox = ( await image.boundingBox() )!;
+
+		/**
+		 * Presses the first marker and drags it to 60%, 70% without releasing it.
+		 */
+		const dragHalfway = async (): Promise< void > => {
+			const from = ( await dragged.boundingBox() )!;
+			await page.mouse.move( from.x + from.width / 2, from.y + from.height / 2 );
+			await page.mouse.down();
+			await page.mouse.move( imageBox.x + imageBox.width * 0.6, imageBox.y + imageBox.height * 0.7, { steps: 10 } );
+			await expect.poll( style ).not.toEqual( [ '30%', '40%' ] );
+		};
+
+		// The browser cancels the gesture (for example, to scroll).
+		await page.evaluate( () => {
+			document.addEventListener( 'pointerdown', ( event ) => ( ( window as any ).lastPointerId = event.pointerId ), true );
+		} );
+		await dragHalfway();
+		const pointerId = await page.evaluate( () => ( window as any ).lastPointerId );
+		await dragged.dispatchEvent( 'pointercancel', { pointerId, bubbles: true } );
+		await expect.poll( style ).toEqual( [ '30%', '40%' ] );
+		// Further moves and the release no longer move it.
+		await page.mouse.move( imageBox.x + imageBox.width * 0.1, imageBox.y + imageBox.height * 0.1, { steps: 3 } );
+		await page.mouse.up();
+		await expect.poll( style ).toEqual( [ '30%', '40%' ] );
+
+		// The editor presses Escape mid-drag.
+		await dragHalfway();
+		await page.keyboard.press( 'Escape' );
+		await expect.poll( style ).toEqual( [ '30%', '40%' ] );
+		await page.mouse.move( imageBox.x + imageBox.width * 0.1, imageBox.y + imageBox.height * 0.1, { steps: 3 } );
+		await page.mouse.up();
+		await expect.poll( style ).toEqual( [ '30%', '40%' ] );
+		await expect( dragged ).toBeFocused();
+		await expect( rows ).toHaveCount( 2 );
+
+		await save( page );
+		expect( savedHotspots() ).toEqual( [
+			{ x: 30, y: 40, label: 'A', description: '' },
+			{ x: 80, y: 80, label: 'B', description: '' },
+		] );
 	} );
 } );

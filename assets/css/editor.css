@@ -51,6 +51,18 @@
 	transform: translate(-50%, -50%);
 }
 
+/*
+ * An invisible target around the marker makes it at least 44px square to
+ * press and drag, without changing how big it looks or where it points. Where
+ * two close markers' targets overlap the other's visible marker, the editor
+ * script grabs the marker that is visible under the pointer.
+ */
+.hotspot-field-editor__marker::before {
+	content: "";
+	position: absolute;
+	inset: -12px;
+}
+
 .hotspot-field-editor__marker:active {
 	cursor: grabbing;
 }

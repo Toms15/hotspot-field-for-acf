@@ -3,7 +3,8 @@
  * where the editor clicks it, and lists the Hotspots with their Label and
  * Description. A Hotspot is selected by its marker or its row; markers move by
  * dragging or with the arrow keys, and rows can be removed and reordered.
- * After a failed save, rows whose Hotspot needs a Label say so. The list is
+ * Moves, reorders and removals are announced in a polite live region. After a
+ * failed save, rows whose Hotspot needs a Label say so. The list is
  * kept, as JSON, in the field's hidden input, which ACF saves with the rest of
  * the form.
  */
@@ -27,11 +28,38 @@
 			moveUp: 'Move %s up',
 			moveDown: 'Move %s down',
 			remove: 'Remove %s',
+			position: '%1$s, %2$s across, %3$s down',
+			reordered: '%1$s moved to position %2$s of %3$s.',
+			removed: '%s removed.',
 		},
 		window.hotspotFieldEditor || {}
 	);
 
 	let uniqueId = 0;
+
+	/**
+	 * Fills in a translated string's numbered (%1$s) or plain (%s) placeholders.
+	 *
+	 * @param {string}    text   Translated string.
+	 * @param {...string} values Values, in placeholder order.
+	 * @return {string} Text.
+	 */
+	function format( text, ...values ) {
+		let next = 0;
+		return text.replace( /%(?:(\d+)\$)?[sd]/g, ( match, position ) => String( values[ position ? Number( position ) - 1 : next++ ] ?? '' ) );
+	}
+
+	/**
+	 * Formats a position, in percent, for the page's language, such as "49.5%".
+	 */
+	const percent = new Intl.NumberFormat( document.documentElement.lang || undefined, { style: 'percent', maximumFractionDigits: 2 } );
+
+	/**
+	 * How long, in milliseconds, the live region waits for moves to stop
+	 * before it announces where the Hotspot is, so a held arrow key is
+	 * announced once.
+	 */
+	const ANNOUNCE_DELAY = 400;
 
 	/**
 	 * A position in percent, clamped to 0–100 and rounded to two decimals.
@@ -127,6 +155,13 @@
 			// Focus lands here when the last Hotspot is removed.
 			this.instructions.tabIndex = -1;
 
+			// Announces moves, reorders and removals to screen readers.
+			this.status = element( 'p', { className: 'hotspot-field-editor__status screen-reader-text' } );
+			this.status.setAttribute( 'role', 'status' );
+			this.status.setAttribute( 'aria-live', 'polite' );
+			this.statusTimer = 0;
+			control.append( this.status );
+
 			this.image = element( 'img', { className: 'hotspot-field-editor__image', alt: strings.imageAlt, draggable: false } );
 			this.markers = element( 'div', { className: 'hotspot-field-editor__markers' } );
 			this.canvas.replaceChildren( this.image, this.markers );
@@ -137,7 +172,7 @@
 			this.markers.addEventListener( 'pointerdown', ( event ) => this.onMarkerPointerDown( event ) );
 			this.markers.addEventListener( 'pointermove', ( event ) => this.onMarkerPointerMove( event ) );
 			this.markers.addEventListener( 'pointerup', ( event ) => this.onMarkerPointerUp( event ) );
-			this.markers.addEventListener( 'pointercancel', ( event ) => this.onMarkerPointerUp( event ) );
+			this.markers.addEventListener( 'pointercancel', ( event ) => this.onMarkerPointerCancel( event ) );
 
 			this.list.addEventListener( 'input', ( event ) => this.onListInput( event ) );
 			this.list.addEventListener( 'focusin', ( event ) => this.onRowActivate( event ) );
@@ -288,6 +323,13 @@
 		 * @param {KeyboardEvent} event Key press.
 		 */
 		onMarkerKeyDown( event ) {
+			if ( event.key === 'Escape' && this.drag ) {
+				event.preventDefault();
+				event.stopPropagation();
+				this.cancelDrag();
+				return;
+			}
+
 			const direction = ARROW_KEYS[ event.key ];
 			const index = this.indexOf( event.target );
 			if ( ! direction || index < 0 || event.altKey || event.ctrlKey || event.metaKey ) {
@@ -300,6 +342,7 @@
 			this.select( index );
 			this.moveHotspot( index, hotspot.x + direction[ 0 ] * step, hotspot.y + direction[ 1 ] * step );
 			this.save();
+			this.announcePosition( index );
 		},
 
 		/**
@@ -308,7 +351,7 @@
 		 * @param {PointerEvent} event Pointer down.
 		 */
 		onMarkerPointerDown( event ) {
-			const index = this.indexOf( event.target );
+			const index = this.markerUnder( event.clientX, event.clientY, this.indexOf( event.target ) );
 			if ( index < 0 || event.button !== 0 ) {
 				return;
 			}
@@ -322,14 +365,42 @@
 			// Keep the marker where it was grabbed, rather than centring it on
 			// the pointer.
 			const rect = marker.getBoundingClientRect();
+			const hotspot = this.hotspots[ index ];
 			this.drag = {
 				index,
 				pointerId: event.pointerId,
+				startX: hotspot.x,
+				startY: hotspot.y,
 				offsetX: event.clientX - ( rect.left + rect.width / 2 ),
 				offsetY: event.clientY - ( rect.top + rect.height / 2 ),
 				moved: false,
 			};
 			marker.setPointerCapture?.( event.pointerId );
+		},
+
+		/**
+		 * The marker to grab at a point. Each marker can be grabbed a little
+		 * outside its visible edge, so a press near two close markers can land
+		 * on the target of the one drawn on top while the pointer is over the
+		 * other one: the marker that is visible under the pointer wins.
+		 *
+		 * @param {number} clientX Horizontal viewport coordinate.
+		 * @param {number} clientY Vertical viewport coordinate.
+		 * @param {number} index   Index of the marker that was hit, or -1.
+		 * @return {number} Index of the marker to grab, or -1.
+		 */
+		markerUnder( clientX, clientY, index ) {
+			if ( index < 0 ) {
+				return index;
+			}
+			const markers = [ ...this.markers.children ];
+			for ( let candidate = markers.length - 1; candidate >= 0; candidate-- ) {
+				const rect = markers[ candidate ].getBoundingClientRect();
+				if ( clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom ) {
+					return candidate;
+				}
+			}
+			return index;
 		},
 
 		/**
@@ -357,11 +428,38 @@
 			if ( ! this.drag || event.pointerId !== this.drag.pointerId ) {
 				return;
 			}
-			const { moved } = this.drag;
+			const { index, moved } = this.drag;
 			this.drag = null;
 			if ( moved ) {
 				this.save();
+				this.announcePosition( index );
 			}
+		},
+
+		/**
+		 * Puts the marker back where it was when the browser cancels the drag
+		 * (for example, to scroll).
+		 *
+		 * @param {PointerEvent} event Pointer cancel.
+		 */
+		onMarkerPointerCancel( event ) {
+			if ( this.drag && event.pointerId === this.drag.pointerId ) {
+				this.cancelDrag();
+			}
+		},
+
+		/**
+		 * Ends a drag without saving it: the marker goes back to where it was
+		 * before the drag.
+		 */
+		cancelDrag() {
+			const { index, pointerId, startX, startY } = this.drag;
+			this.drag = null;
+			const marker = this.markerAt( index );
+			if ( marker?.hasPointerCapture?.( pointerId ) ) {
+				marker.releasePointerCapture( pointerId );
+			}
+			this.moveHotspot( index, startX, startY );
 		},
 
 		/**
@@ -421,6 +519,7 @@
 		 * @param {number} index Hotspot index.
 		 */
 		removeHotspot( index ) {
+			const name = this.hotspotName( index );
 			this.hotspots.splice( index, 1 );
 			const next = Math.min( index, this.hotspots.length - 1 );
 			this.selected = next;
@@ -432,6 +531,7 @@
 			} else {
 				this.instructions.focus();
 			}
+			this.announce( format( strings.removed, name ) );
 		},
 
 		/**
@@ -449,6 +549,7 @@
 				return;
 			}
 
+			const name = this.hotspotName( index );
 			const [ hotspot ] = this.hotspots.splice( index, 1 );
 			this.hotspots.splice( target, 0, hotspot );
 			this.selected = target;
@@ -458,6 +559,33 @@
 			const row = this.rowAt( target );
 			const used = row.querySelector( `[data-action="${ action }"]` );
 			( used.disabled ? row.querySelector( `[data-action="${ action === 'up' ? 'down' : 'up' }"]` ) : used ).focus();
+			this.announce( format( strings.reordered, name, String( target + 1 ), String( this.hotspots.length ) ) );
+		},
+
+		/**
+		 * Announces where a Hotspot is, such as "Hotspot 1: Lamp, 51% across,
+		 * 49.5% down".
+		 *
+		 * @param {number} index Hotspot index.
+		 */
+		announcePosition( index ) {
+			const hotspot = this.hotspots[ index ];
+			if ( hotspot ) {
+				this.announce( format( strings.position, this.hotspotName( index ), percent.format( hotspot.x / 100 ), percent.format( hotspot.y / 100 ) ) );
+			}
+		},
+
+		/**
+		 * Puts a message in the live region once things have been quiet for a
+		 * moment; a newer message replaces one still waiting.
+		 *
+		 * @param {string} message Message.
+		 */
+		announce( message ) {
+			window.clearTimeout( this.statusTimer );
+			this.statusTimer = window.setTimeout( () => {
+				this.status.textContent = message;
+			}, ANNOUNCE_DELAY );
 		},
 
 		/**
@@ -543,7 +671,7 @@
 		 * @return {string} Name.
 		 */
 		hotspotName( index ) {
-			const name = strings.hotspot.replace( '%d', String( index + 1 ) );
+			const name = format( strings.hotspot, String( index + 1 ) );
 			const label = this.hotspots[ index ].label.trim();
 			return label ? `${ name }: ${ label }` : name;
 		},
@@ -562,7 +690,7 @@
 			}
 			const names = { remove: strings.remove, up: strings.moveUp, down: strings.moveDown };
 			row.querySelectorAll( '[data-action]' ).forEach( ( button ) => {
-				button.setAttribute( 'aria-label', names[ button.dataset.action ].replace( '%s', name ) );
+				button.setAttribute( 'aria-label', format( names[ button.dataset.action ], name ) );
 			} );
 		},
 
@@ -595,7 +723,7 @@
 
 					const heading = element( 'span', {
 						className: 'hotspot-field-editor__row-title',
-						textContent: strings.hotspot.replace( '%d', String( index + 1 ) ),
+						textContent: format( strings.hotspot, String( index + 1 ) ),
 					} );
 
 					const label = element( 'input', {
