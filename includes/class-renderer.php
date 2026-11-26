@@ -12,7 +12,11 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Produces the frontend markup of a Hotspot Field. Every render entry point
  * (shortcode, hotspot_field_render(), hotspot_field_render_hotspots()) ends up
- * here, so they all produce the same markup.
+ * here, so they all produce the same markup, apart from the Popover IDs:
+ * those are unique per request, so a field rendered twice on a page (say a
+ * shortcode in the content and hotspot_field_render() in the template) is
+ * still valid HTML and each button opens its own Popover, with or without
+ * JavaScript.
  */
 final class Renderer {
 
@@ -72,7 +76,7 @@ final class Renderer {
 		}
 
 		$hotspots = Hotspot_Value::normalize( $hotspots );
-		$id_base  = self::id_base( $attachment_id, $hotspots );
+		$id_base  = wp_unique_id( 'hotspot-field-' );
 		$buttons  = '';
 
 		foreach ( $hotspots as $index => $hotspot ) {
@@ -111,19 +115,6 @@ final class Renderer {
 			esc_html( $name ),
 			$description
 		);
-	}
-
-	/**
-	 * The start of the Popover IDs of one render. It depends only on what is
-	 * rendered, so every entry point produces identical markup; when the same
-	 * Hotspots are rendered twice on a page, the frontend script links each
-	 * button to its own Popover anyway.
-	 *
-	 * @param int   $attachment_id Image attachment ID.
-	 * @param array $hotspots      Normalized Hotspots.
-	 */
-	private static function id_base( int $attachment_id, array $hotspots ): string {
-		return 'hotspot-field-' . substr( md5( (string) wp_json_encode( array( $attachment_id, $hotspots ) ) ), 0, 10 );
 	}
 
 	/**

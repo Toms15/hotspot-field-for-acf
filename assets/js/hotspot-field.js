@@ -7,9 +7,10 @@
  * only:
  * - dispatches a bubbling, cancelable `hotspotfield:open` event on the button
  *   before its Popover opens (`preventDefault()` keeps it closed);
- * - places the open Popover next to its button, inside the viewport;
- * - links every button to its own Popover, even when the same Hotspots are
- *   rendered twice on a page.
+ * - places the open Popover next to its button, inside the viewport while
+ *   the button is in view, and keeps it with the button when it scrolls out;
+ * - links every button to its own Popover, as a fallback for markup echoed
+ *   twice (for example from a cache), whose Popover IDs would repeat.
  */
 ( function () {
 	'use strict';
@@ -19,6 +20,9 @@
 
 	/** Space between the button and its Popover, and the viewport edges, in px. */
 	var GAP = 8;
+
+	/** The Hotspot Popover that is open, if any. */
+	var open = null;
 
 	if ( ! ( 'popover' in HTMLElement.prototype ) ) {
 		return;
@@ -49,8 +53,9 @@
 	}
 
 	/**
-	 * Makes a button open its own Popover. Duplicate IDs (the same Hotspots
-	 * rendered twice) would otherwise make it open another copy's Popover.
+	 * Makes a button open its own Popover. The renderer gives every Popover
+	 * a unique ID, but the same markup echoed twice would repeat them and
+	 * make the second copy's buttons open the first copy's Popovers.
 	 *
 	 * @param {HTMLElement} button Hotspot button.
 	 */
@@ -78,7 +83,10 @@
 
 	/**
 	 * Places an open Popover below its button, or above it when there is
-	 * more room there, and keeps it inside the viewport.
+	 * more room there. While the button is in view the Popover is kept
+	 * inside the viewport; on an axis where the button has scrolled out of
+	 * view it is not, so the Popover leaves with its button instead of
+	 * staying pinned to the edge, and comes back with it.
 	 *
 	 * @param {HTMLElement} popover Popover.
 	 */
@@ -107,18 +115,25 @@
 				: anchor.top - GAP - size.height;
 		var left = anchor.left + anchor.width / 2 - size.width / 2;
 
-		left = Math.min( left, viewportWidth - GAP - size.width );
-		top = Math.min( top, viewportHeight - GAP - size.height );
+		if ( anchor.right > 0 && anchor.left < viewportWidth ) {
+			left = Math.max( GAP, Math.min( left, viewportWidth - GAP - size.width ) );
+		}
 
-		popover.style.left = Math.max( GAP, left ) + 'px';
-		popover.style.top = Math.max( GAP, top ) + 'px';
+		if ( anchor.bottom > 0 && anchor.top < viewportHeight ) {
+			top = Math.max( GAP, Math.min( top, viewportHeight - GAP - size.height ) );
+		}
+
+		popover.style.left = left + 'px';
+		popover.style.top = top + 'px';
 	}
 
 	/**
-	 * Places every open Hotspot Popover again, after scrolling or resizing.
+	 * Places the open Hotspot Popover again, after scrolling or resizing.
 	 */
 	function placeOpen() {
-		document.querySelectorAll( POPOVER + ':popover-open' ).forEach( place );
+		if ( open ) {
+			place( open );
+		}
 	}
 
 	document.querySelectorAll( BUTTON ).forEach( link );
@@ -172,11 +187,21 @@
 		true
 	);
 
+	// `toggle` does not bubble either.
 	document.addEventListener(
 		'toggle',
 		function ( event ) {
-			if ( 'open' === event.newState && event.target instanceof HTMLElement && event.target.matches( POPOVER ) ) {
-				place( event.target );
+			var popover = event.target;
+
+			if ( ! ( popover instanceof HTMLElement ) || ! popover.matches( POPOVER ) ) {
+				return;
+			}
+
+			if ( 'open' === event.newState ) {
+				open = popover;
+				place( popover );
+			} else if ( open === popover ) {
+				open = null;
 			}
 		},
 		true

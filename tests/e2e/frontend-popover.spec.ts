@@ -260,6 +260,61 @@ test.describe( 'Frontend Popover', () => {
 		await expectInsideViewportNear( page, rug.popover, rug.button );
 	} );
 
+	test( 'an open Popover stays with its button when the button scrolls out of view', async ( { page } ) => {
+		await page.setViewportSize( { width: 360, height: 640 } );
+		const { button, popover } = await openPage( page, 'Lamp' );
+		await page.addStyleTag( { content: 'body { padding-bottom: 300vh !important; }' } );
+
+		await button.evaluate( ( element ) => element.scrollIntoView( { block: 'center' } ) );
+		await button.click();
+		await expect( popover ).toBeVisible();
+		await expectInsideViewportNear( page, popover, button );
+
+		// Scroll until the button is well above the viewport.
+		await page.evaluate( () => window.scrollBy( 0, document.documentElement.clientHeight * 1.5 ) );
+		await expect.poll( async () => ( await button.boundingBox() )!.y + ( await button.boundingBox() )!.height ).toBeLessThan( 0 );
+
+		// Not pinned to the viewport edge, away from its button: it moved out
+		// of view with it.
+		await expect( async () => {
+			const box = ( await popover.boundingBox() )!;
+			const anchor = ( await button.boundingBox() )!;
+
+			expect( box.y + box.height ).toBeLessThanOrEqual( 0 );
+			expect( box.y - ( anchor.y + anchor.height ) ).toBeGreaterThanOrEqual( 0 );
+			expect( box.y - ( anchor.y + anchor.height ) ).toBeLessThanOrEqual( 16 );
+		} ).toPass( { timeout: 2000 } );
+
+		// Scrolled back, it is right next to its button again.
+		await button.evaluate( ( element ) => element.scrollIntoView( { block: 'center' } ) );
+		await expect( popover ).toBeVisible();
+		await expectInsideViewportNear( page, popover, button );
+	} );
+
+	test( 'markers react to hover, keeping their custom colour', async ( { page } ) => {
+		const { button } = await openPage( page, 'Lamp' );
+		const marker = () =>
+			button.evaluate( ( element ) => {
+				const style = getComputedStyle( element, '::before' );
+
+				return { scale: new DOMMatrix( style.transform ).a, color: style.backgroundColor };
+			} );
+
+		await page.addStyleTag( { content: ':root { --hotspot-field-marker-color: rgb(0, 128, 0); }' } );
+		await page.mouse.move( 0, 0 );
+		await expect.poll( marker ).toEqual( { scale: 1, color: 'rgb(0, 128, 0)' } );
+
+		await button.hover();
+		await expect.poll( async () => ( await marker() ).scale ).toBeGreaterThan( 1 );
+		expect( ( await marker() ).color ).toBe( 'rgb(0, 128, 0)' );
+
+		await page.addStyleTag( { content: ':root { --hotspot-field-marker-hover-scale: 1.5; }' } );
+		await expect.poll( marker ).toEqual( { scale: 1.5, color: 'rgb(0, 128, 0)' } );
+
+		await page.mouse.move( 0, 0 );
+		await expect.poll( async () => ( await marker() ).scale ).toBe( 1 );
+	} );
+
 	test( 'markers are large enough to tap, and custom properties restyle them and the Popover', async ( { page } ) => {
 		const { button, popover } = await openPage( page, 'Lamp' );
 
@@ -296,6 +351,7 @@ test.describe( 'Frontend Popover', () => {
 		await page.goto( `/?page_id=${ twicePageId }` );
 		const fields = page.locator( '.hotspot-field' );
 		await expect( fields ).toHaveCount( 2 );
+		await expectUniqueIdsAndOwnPopovers( page );
 
 		for ( const index of [ 1, 0 ] ) {
 			const button = fields.nth( index ).getByRole( 'button', { name: 'Lamp', exact: true } );
@@ -319,6 +375,31 @@ test.describe( 'Frontend Popover', () => {
 		await openPage( page, 'Lamp' );
 		await expect( page.locator( 'link#hotspot-field-for-acf-css' ) ).toHaveCount( 1 );
 		await expect( page.locator( 'script#hotspot-field-for-acf-js' ) ).toHaveCount( 1 );
+	} );
+} );
+
+test.describe( 'Frontend Popover without JavaScript', () => {
+	test.use( { javaScriptEnabled: false } );
+
+	test( 'each copy of Hotspots rendered twice opens its own Popovers', async ( { page } ) => {
+		await page.goto( `/?page_id=${ twicePageId }` );
+		const fields = page.locator( '.hotspot-field' );
+		await expect( fields ).toHaveCount( 2 );
+		await expectUniqueIdsAndOwnPopovers( page );
+
+		for ( const index of [ 1, 0 ] ) {
+			for ( const { label } of hotspots ) {
+				const button = fields.nth( index ).getByRole( 'button', { name: label, exact: true } );
+				const popover = button.locator( 'xpath=following-sibling::*[1][@popover]' );
+
+				await button.click();
+				await expect( popover ).toBeVisible();
+				await expect( popover.locator( '.hotspot-field__popover-label' ) ).toHaveText( label );
+				await expect( page.locator( '.hotspot-field__popover:popover-open' ) ).toHaveCount( 1 );
+				await page.keyboard.press( 'Escape' );
+				await expect( popover ).toBeHidden();
+			}
+		}
 	} );
 } );
 
@@ -418,6 +499,33 @@ async function expectInsideViewportNear( page: Page, popover: Locator, button: L
 		expect( box.x, 'horizontally next to the button' ).toBeLessThanOrEqual( anchor.x + anchor.width );
 		expect( box.x + box.width, 'horizontally next to the button' ).toBeGreaterThanOrEqual( anchor.x );
 	} ).toPass( { timeout: 2000 } );
+}
+
+/**
+ * Asserts that no two elements on the page share an ID, and that every
+ * Hotspot button's `popovertarget` names the Popover rendered right after it.
+ *
+ * @param page Playwright page.
+ */
+async function expectUniqueIdsAndOwnPopovers( page: Page ): Promise< void > {
+	const { ids, buttons, ownPopovers } = await page.evaluate( () => {
+		const all = Array.from( document.querySelectorAll( '[id]' ), ( element ) => element.id );
+		const hotspotButtons = Array.from( document.querySelectorAll( '.hotspot-field__hotspot' ) );
+
+		return {
+			ids: all,
+			buttons: hotspotButtons.length,
+			ownPopovers: hotspotButtons.filter( ( button ) => {
+				const next = button.nextElementSibling;
+
+				return !! next && next.hasAttribute( 'popover' ) && next.id === button.getAttribute( 'popovertarget' );
+			} ).length,
+		};
+	} );
+
+	expect( buttons ).toBe( 2 * hotspots.length );
+	expect( ids.filter( ( id, index ) => ids.indexOf( id ) !== index ), 'duplicate IDs' ).toEqual( [] );
+	expect( ownPopovers ).toBe( buttons );
 }
 
 /**

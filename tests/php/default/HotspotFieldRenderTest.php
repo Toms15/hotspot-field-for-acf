@@ -107,13 +107,13 @@ class HotspotFieldRenderTest extends Hotspot_Field_Test_Case {
 	 * The image may be given as an attachment ID, an ACF image array or a URL.
 	 */
 	public function test_accepts_the_image_as_id_array_or_url(): void {
-		$expected = hotspot_field_render_hotspots( self::HOTSPOTS, $this->image_id );
+		$expected = $this->comparable( hotspot_field_render_hotspots( self::HOTSPOTS, $this->image_id ) );
 
 		$this->assertNotSame( '', $expected );
-		$this->assertSame( $expected, hotspot_field_render_hotspots( self::HOTSPOTS, (string) $this->image_id ), 'ID as a string' );
-		$this->assertSame( $expected, hotspot_field_render_hotspots( self::HOTSPOTS, acf_get_attachment( $this->image_id ) ), 'ACF image array' );
-		$this->assertSame( $expected, hotspot_field_render_hotspots( self::HOTSPOTS, array( 'id' => $this->image_id ) ), 'Array with lowercase id' );
-		$this->assertSame( $expected, hotspot_field_render_hotspots( self::HOTSPOTS, wp_get_attachment_url( $this->image_id ) ), 'URL' );
+		$this->assertSame( $expected, $this->comparable( hotspot_field_render_hotspots( self::HOTSPOTS, (string) $this->image_id ) ), 'ID as a string' );
+		$this->assertSame( $expected, $this->comparable( hotspot_field_render_hotspots( self::HOTSPOTS, acf_get_attachment( $this->image_id ) ) ), 'ACF image array' );
+		$this->assertSame( $expected, $this->comparable( hotspot_field_render_hotspots( self::HOTSPOTS, array( 'id' => $this->image_id ) ) ), 'Array with lowercase id' );
+		$this->assertSame( $expected, $this->comparable( hotspot_field_render_hotspots( self::HOTSPOTS, wp_get_attachment_url( $this->image_id ) ) ), 'URL' );
 	}
 
 	/**
@@ -214,8 +214,8 @@ class HotspotFieldRenderTest extends Hotspot_Field_Test_Case {
 		$expected = hotspot_field_render_hotspots( get_field( 'hotspots', $post_id ), $this->image_id );
 
 		$this->assertCount( 3, $this->buttons( $expected ) );
-		$this->assertSame( $expected, hotspot_field_render( 'hotspots', $post_id ) );
-		$this->assertSame( $expected, do_shortcode( sprintf( '[hotspot_field name="hotspots" post_id="%d"]', $post_id ) ) );
+		$this->assertSame( $this->comparable( $expected ), $this->comparable( hotspot_field_render( 'hotspots', $post_id ) ) );
+		$this->assertSame( $this->comparable( $expected ), $this->comparable( do_shortcode( sprintf( '[hotspot_field name="hotspots" post_id="%d"]', $post_id ) ) ) );
 	}
 
 	/**
@@ -230,10 +230,10 @@ class HotspotFieldRenderTest extends Hotspot_Field_Test_Case {
 		$this->assertTrue( have_posts() );
 		the_post();
 
-		$expected = $this->without_loading_hints( hotspot_field_render_hotspots( self::HOTSPOTS, $this->image_id ) );
+		$expected = $this->without_loading_hints( $this->comparable( hotspot_field_render_hotspots( self::HOTSPOTS, $this->image_id ) ) );
 
-		$this->assertSame( $expected, $this->without_loading_hints( hotspot_field_render( 'hotspots' ) ) );
-		$this->assertSame( $expected, $this->without_loading_hints( do_shortcode( '[hotspot_field name="hotspots"]' ) ) );
+		$this->assertSame( $expected, $this->without_loading_hints( $this->comparable( hotspot_field_render( 'hotspots' ) ) ) );
+		$this->assertSame( $expected, $this->without_loading_hints( $this->comparable( do_shortcode( '[hotspot_field name="hotspots"]' ) ) ) );
 	}
 
 	/**
@@ -244,8 +244,8 @@ class HotspotFieldRenderTest extends Hotspot_Field_Test_Case {
 		$expected = hotspot_field_render_hotspots( self::HOTSPOTS, $this->image_id, 'medium' );
 
 		$this->assertSame( '300', $this->image( $expected )->getAttribute( 'width' ) );
-		$this->assertSame( $expected, hotspot_field_render( 'hotspots', $post_id, 'medium' ) );
-		$this->assertSame( $expected, do_shortcode( sprintf( '[hotspot_field name="hotspots" post_id="%d" size="medium"]', $post_id ) ) );
+		$this->assertSame( $this->comparable( $expected ), $this->comparable( hotspot_field_render( 'hotspots', $post_id, 'medium' ) ) );
+		$this->assertSame( $this->comparable( $expected ), $this->comparable( do_shortcode( sprintf( '[hotspot_field name="hotspots" post_id="%d" size="medium"]', $post_id ) ) ) );
 	}
 
 	/**
@@ -434,6 +434,36 @@ class HotspotFieldRenderTest extends Hotspot_Field_Test_Case {
 		$this->save_hotspots( $post_id, $hotspots );
 
 		return $post_id;
+	}
+
+	/**
+	 * Markup with its Popover IDs replaced by placeholders, after checking
+	 * that each button's `popovertarget` names a Popover of the same markup.
+	 * Popover IDs are unique per page, so they differ between renders; the
+	 * rest of the markup is identical whatever the entry point.
+	 *
+	 * @param string $html Markup.
+	 */
+	private function comparable( string $html ): string {
+		$xpath = $this->parse( $html );
+
+		foreach ( $xpath->query( '//button' ) as $button ) {
+			$target = $button->getAttribute( 'popovertarget' );
+
+			$this->assertSame( 1, $xpath->query( sprintf( '//*[@popover][@id="%s"]', $target ) )->length, 'Each button opens a Popover of the same markup.' );
+		}
+
+		$placeholders = array();
+
+		return (string) preg_replace_callback(
+			'/ (id|popovertarget)="([^"]*)"/',
+			static function ( array $matches ) use ( &$placeholders ): string {
+				$placeholders[ $matches[2] ] ??= 'popover-' . ( count( $placeholders ) + 1 );
+
+				return sprintf( ' %s="%s"', $matches[1], $placeholders[ $matches[2] ] );
+			},
+			$html
+		);
 	}
 
 	/**

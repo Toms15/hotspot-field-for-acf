@@ -80,6 +80,38 @@ class HotspotFieldPopoverTest extends Hotspot_Field_Test_Case {
 	}
 
 	/**
+	 * The same Hotspots rendered twice on a page (for example a shortcode in
+	 * the content and hotspot_field_render() in the template) get distinct
+	 * Popover IDs, and each copy's buttons open their own Popovers.
+	 */
+	public function test_rendering_twice_gives_each_copy_its_own_popovers(): void {
+		$post_id = self::factory()->post->create();
+		update_field( 'field_hotspot_tests_photo', $this->image_id, $post_id );
+		$this->save_hotspots( $post_id, self::HOTSPOTS );
+
+		$copies = array(
+			do_shortcode( sprintf( '[hotspot_field name="hotspots" post_id="%d"]', $post_id ) ),
+			hotspot_field_render( 'hotspots', $post_id ),
+			hotspot_field_render_hotspots( self::HOTSPOTS, $this->image_id ),
+		);
+		$xpath  = $this->parse( implode( '', $copies ) );
+		$ids    = array();
+
+		foreach ( $xpath->query( '//*[@id]' ) as $element ) {
+			$ids[] = $element->getAttribute( 'id' );
+		}
+
+		$this->assertCount( 6, $ids );
+		$this->assertSame( $ids, array_unique( $ids ), 'Every ID on the page is unique.' );
+
+		foreach ( $xpath->query( '//button' ) as $button ) {
+			$popover = $this->popover_of( $xpath, $button );
+
+			$this->assertTrue( $popover->previousSibling->isSameNode( $button ), 'Each button opens the Popover rendered right after it.' ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM property.
+		}
+	}
+
+	/**
 	 * A Description's line breaks are kept as visible line breaks.
 	 */
 	public function test_description_line_breaks_are_rendered(): void {

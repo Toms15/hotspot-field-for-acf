@@ -8,6 +8,7 @@
  * --hotspot-field-marker-size          Visible marker diameter (default 1.5rem).
  * --hotspot-field-marker-color         Marker fill (default #d63638).
  * --hotspot-field-marker-border-color  Marker outline (default #fff).
+ * --hotspot-field-marker-hover-scale   Marker growth under the pointer (default 1.15; 1 turns it off).
  * --hotspot-field-touch-target         Minimum tappable size (default 44px).
  * --hotspot-field-focus-ring-color     Keyboard focus ring (default #2271b1).
  * --hotspot-field-focus-ring-width     Keyboard focus ring width (default 3px).
@@ -61,6 +62,18 @@
 	background: var(--hotspot-field-marker-color, #d63638);
 	box-shadow: 0 1px 3px rgb(0 0 0 / 40%);
 	transform: translate(-50%, -50%);
+}
+
+@media (hover: hover) {
+	.hotspot-field__hotspot:hover::before {
+		transform: translate(-50%, -50%) scale(var(--hotspot-field-marker-hover-scale, 1.15));
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.hotspot-field__hotspot::before {
+		transition: transform 0.15s ease-out;
+	}
 }
 
 .hotspot-field__hotspot:focus {
