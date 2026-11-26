@@ -89,12 +89,64 @@ class Hotspot_Field extends \acf_field {
 			self::EDITOR_HANDLE,
 			'hotspotFieldEditor',
 			array(
-				'imageAlt'    => __( 'Image to place Hotspots on', 'hotspot-field-for-acf' ),
+				'imageAlt'     => __( 'Image to place Hotspots on', 'hotspot-field-for-acf' ),
 				/* translators: %d: position of the Hotspot in the list, starting at 1. */
-				'hotspot'     => __( 'Hotspot %d', 'hotspot-field-for-acf' ),
-				'label'       => __( 'Label', 'hotspot-field-for-acf' ),
-				'description' => __( 'Description', 'hotspot-field-for-acf' ),
+				'hotspot'      => __( 'Hotspot %d', 'hotspot-field-for-acf' ),
+				'label'        => __( 'Label', 'hotspot-field-for-acf' ),
+				'description'  => __( 'Description', 'hotspot-field-for-acf' ),
+				'missingLabel' => __( 'This Hotspot needs a Label.', 'hotspot-field-for-acf' ),
 			)
+		);
+	}
+
+	/**
+	 * Blocks the save when the content is invalid: a Hotspot without a Label
+	 * (the message names its row, numbered from 1 as in the editor), or a
+	 * required Hotspot Field without Hotspots.
+	 *
+	 * Like every value ACF validates, it arrives slashed, as WordPress slashes
+	 * form data.
+	 *
+	 * @param bool|string $valid Whether the value is valid so far, or an error message.
+	 * @param mixed       $value Submitted value: a list, or its JSON encoding.
+	 * @param array       $field The field.
+	 * @param string      $input Name of the field's input.
+	 * @return bool|string True when valid, otherwise the error message.
+	 */
+	public function validate_value( $valid, $value, $field, $input ) {
+		if ( is_string( $valid ) ) {
+			return $valid;
+		}
+
+		$hotspots = Hotspot_Value::normalize( wp_unslash( $value ) );
+
+		if ( ! $hotspots ) {
+			if ( empty( $field['required'] ) ) {
+				return $valid;
+			}
+
+			return sprintf(
+				/* translators: %s: label of the Hotspot Field. */
+				__( 'Add at least one Hotspot to %s.', 'hotspot-field-for-acf' ),
+				$field['label']
+			);
+		}
+
+		$without_label = array();
+		foreach ( $hotspots as $index => $hotspot ) {
+			if ( '' === $hotspot['label'] ) {
+				$without_label[] = (string) ( $index + 1 );
+			}
+		}
+
+		if ( ! $without_label ) {
+			return $valid;
+		}
+
+		return sprintf(
+			/* translators: %s: number of the Hotspot in the list, or a list of numbers, such as "1, 3, and 4". */
+			_n( 'Hotspot %s needs a Label.', 'Hotspots %s need a Label.', count( $without_label ), 'hotspot-field-for-acf' ),
+			wp_sprintf( '%l', $without_label )
 		);
 	}
 

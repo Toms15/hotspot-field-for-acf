@@ -17,6 +17,7 @@
 			hotspot: 'Hotspot %d',
 			label: 'Label',
 			description: 'Description',
+			missingLabel: 'This Hotspot needs a Label.',
 		},
 		window.hotspotFieldEditor || {}
 	);
@@ -89,6 +90,8 @@
 
 			this.hotspots = parseHotspots( this.$input().val() );
 			this.selected = -1;
+			// Hotspots the last failed validation found without a Label.
+			this.missingLabel = new WeakSet();
 			this.canvas = control.querySelector( '.hotspot-field-editor__canvas' );
 			this.list = control.querySelector( '.hotspot-field-editor__list' );
 
@@ -184,10 +187,57 @@
 			if ( event.target.classList.contains( 'hotspot-field-editor__label' ) ) {
 				hotspot.label = event.target.value;
 				this.markers.children[ Number( row.dataset.index ) ]?.setAttribute( 'aria-label', this.markerName( Number( row.dataset.index ) ) );
+				if ( hotspot.label.trim() ) {
+					this.missingLabel.delete( hotspot );
+				}
+				this.renderRowError( row );
 			} else if ( event.target.classList.contains( 'hotspot-field-editor__description' ) ) {
 				hotspot.description = event.target.value;
 			}
 			this.save();
+		},
+
+		/**
+		 * Shows ACF's validation message on the field and, on each row whose
+		 * Hotspot has no Label, a message of its own until it gets one.
+		 *
+		 * @param {string} message  Message.
+		 * @param {string} location Where ACF places the message.
+		 */
+		showError( message, location ) {
+			acf.Field.prototype.showError.apply( this, [ message, location ] );
+			if ( ! this.list ) {
+				return;
+			}
+
+			this.hotspots.forEach( ( hotspot ) => {
+				if ( ! hotspot.label.trim() ) {
+					this.missingLabel.add( hotspot );
+				}
+			} );
+			this.list.querySelectorAll( '.hotspot-field-editor__row' ).forEach( ( row ) => this.renderRowError( row ) );
+		},
+
+		/**
+		 * Shows or hides the message of a row whose Hotspot needs a Label.
+		 *
+		 * @param {HTMLElement} row List row.
+		 */
+		renderRowError( row ) {
+			const hotspot = this.hotspots[ Number( row.dataset.index ) ];
+			const label = row.querySelector( '.hotspot-field-editor__label' );
+			const error = row.querySelector( '.hotspot-field-editor__row-error' );
+			const invalid = Boolean( hotspot && this.missingLabel.has( hotspot ) );
+
+			row.classList.toggle( 'has-error', invalid );
+			error.hidden = ! invalid;
+			if ( invalid ) {
+				label.setAttribute( 'aria-invalid', 'true' );
+				label.setAttribute( 'aria-describedby', error.id );
+			} else {
+				label.removeAttribute( 'aria-invalid' );
+				label.removeAttribute( 'aria-describedby' );
+			}
 		},
 
 		/**
@@ -246,6 +296,11 @@
 						className: 'hotspot-field-editor__label',
 						value: hotspot.label,
 					} );
+					const error = element( 'p', {
+						id: `${ id }-error`,
+						className: 'hotspot-field-editor__row-error',
+						textContent: strings.missingLabel,
+					} );
 					const description = element( 'textarea', {
 						id: `${ id }-description`,
 						className: 'hotspot-field-editor__description',
@@ -257,9 +312,11 @@
 						heading,
 						element( 'label', { htmlFor: label.id, textContent: strings.label } ),
 						label,
+						error,
 						element( 'label', { htmlFor: description.id, textContent: strings.description } ),
 						description
 					);
+					this.renderRowError( row );
 					return row;
 				} )
 			);

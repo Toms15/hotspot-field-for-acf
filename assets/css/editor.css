@@ -87,3 +87,17 @@
 .hotspot-field-editor__row label {
 	padding-top: 4px;
 }
+
+.hotspot-field-editor__row.has-error {
+	border-left-color: #d63638;
+}
+
+.hotspot-field-editor__row-error {
+	grid-column: 2;
+	margin: 0;
+	color: #d63638;
+}
+
+.hotspot-field-editor__row-error[hidden] {
+	display: none;
+}
