@@ -87,3 +87,41 @@
 .hotspot-field-editor__row label {
 	padding-top: 4px;
 }
+
+/*
+ * A row whose Hotspot needs a Label: dashed border, tinted background and a
+ * warning icon before its message, so it never looks like the selected row
+ * (solid accent on the left) and does not rely on colour alone.
+ */
+.hotspot-field-editor__row.has-error {
+	border-style: dashed;
+	border-width: 2px 2px 2px 4px;
+	border-color: #d63638;
+	background: #fcf0f1;
+}
+
+.hotspot-field-editor__row.has-error.is-selected {
+	border-left-style: solid;
+	border-left-color: #1d2327;
+}
+
+.hotspot-field-editor__row-error {
+	display: flex;
+	grid-column: 2;
+	gap: 4px;
+	align-items: center;
+	margin: 0;
+	color: #b32d2e;
+	font-weight: 600;
+}
+
+.hotspot-field-editor__row-error::before {
+	content: "\f534";
+	/* Decorative: the message already says what is wrong. */
+	content: "\f534" / "";
+	font: normal 20px/1 dashicons;
+}
+
+.hotspot-field-editor__row-error[hidden] {
+	display: none;
+}
