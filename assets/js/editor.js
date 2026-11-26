@@ -2,8 +2,10 @@
  * Hotspot Field editor: shows the Linked Image Field's image, adds a Hotspot
  * where the editor clicks it, and lists the Hotspots with their Label and
  * Description. A Hotspot is selected by its marker or its row; markers move by
- * dragging or with the arrow keys, and rows can be removed and reordered. The list is kept, as JSON, in the field's hidden input, which
- * ACF saves with the rest of the form.
+ * dragging or with the arrow keys, and rows can be removed and reordered.
+ * After a failed save, rows whose Hotspot needs a Label say so. The list is
+ * kept, as JSON, in the field's hidden input, which ACF saves with the rest of
+ * the form.
  */
 ( function ( $, acf ) {
 	'use strict';
@@ -18,6 +20,7 @@
 			hotspot: 'Hotspot %d',
 			label: 'Label',
 			description: 'Description',
+			missingLabel: 'This Hotspot needs a Label.',
 			up: 'Up',
 			down: 'Down',
 			removeText: 'Remove',
@@ -113,6 +116,10 @@
 			this.hotspots = parseHotspots( this.$input().val() );
 			this.selected = -1;
 			this.drag = null;
+			// Hotspots the last failed validation found without a Label. Kept
+			// per Hotspot, not per row, so a row's message follows its Hotspot
+			// when the list is reordered or a Hotspot is removed.
+			this.missingLabel = new WeakSet();
 			this.canvas = control.querySelector( '.hotspot-field-editor__canvas' );
 			this.list = control.querySelector( '.hotspot-field-editor__list' );
 			this.instructions = control.querySelector( '.hotspot-field-editor__instructions' );
@@ -468,10 +475,57 @@
 			if ( event.target.classList.contains( 'hotspot-field-editor__label' ) ) {
 				hotspot.label = event.target.value;
 				this.nameControls( index );
+				if ( hotspot.label.trim() ) {
+					this.missingLabel.delete( hotspot );
+				}
+				this.renderRowError( this.rowAt( index ) );
 			} else if ( event.target.classList.contains( 'hotspot-field-editor__description' ) ) {
 				hotspot.description = event.target.value;
 			}
 			this.save();
+		},
+
+		/**
+		 * Shows ACF's validation message on the field and, on each row whose
+		 * Hotspot has no Label, a message of its own until it gets one.
+		 *
+		 * @param {string} message  Message.
+		 * @param {string} location Where ACF places the message.
+		 */
+		showError( message, location ) {
+			acf.Field.prototype.showError.apply( this, [ message, location ] );
+			if ( ! this.list ) {
+				return;
+			}
+
+			this.hotspots.forEach( ( hotspot ) => {
+				if ( ! hotspot.label.trim() ) {
+					this.missingLabel.add( hotspot );
+				}
+			} );
+			this.list.querySelectorAll( '.hotspot-field-editor__row' ).forEach( ( row ) => this.renderRowError( row ) );
+		},
+
+		/**
+		 * Shows or hides the message of a row whose Hotspot needs a Label.
+		 *
+		 * @param {HTMLElement} row List row.
+		 */
+		renderRowError( row ) {
+			const hotspot = this.hotspots[ Number( row.dataset.index ) ];
+			const label = row.querySelector( '.hotspot-field-editor__label' );
+			const error = row.querySelector( '.hotspot-field-editor__row-error' );
+			const invalid = Boolean( hotspot && this.missingLabel.has( hotspot ) );
+
+			row.classList.toggle( 'has-error', invalid );
+			error.hidden = ! invalid;
+			if ( invalid ) {
+				label.setAttribute( 'aria-invalid', 'true' );
+				label.setAttribute( 'aria-describedby', error.id );
+			} else {
+				label.removeAttribute( 'aria-invalid' );
+				label.removeAttribute( 'aria-describedby' );
+			}
 		},
 
 		/**
@@ -550,6 +604,11 @@
 						className: 'hotspot-field-editor__label',
 						value: hotspot.label,
 					} );
+					const error = element( 'p', {
+						id: `${ id }-error`,
+						className: 'hotspot-field-editor__row-error',
+						textContent: strings.missingLabel,
+					} );
 					const description = element( 'textarea', {
 						id: `${ id }-description`,
 						className: 'hotspot-field-editor__description',
@@ -573,10 +632,12 @@
 						heading,
 						element( 'label', { htmlFor: label.id, textContent: strings.label } ),
 						label,
+						error,
 						element( 'label', { htmlFor: description.id, textContent: strings.description } ),
 						description,
 						actions
 					);
+					this.renderRowError( row );
 					return row;
 				} )
 			);

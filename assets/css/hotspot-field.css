@@ -1,7 +1,24 @@
 /*
- * Hotspot Field for ACF: frontend layout. Places each Hotspot's button over
- * the image at its percentage position; the Label names the button for
- * assistive technology.
+ * Hotspot Field for ACF: frontend styles. Places each Hotspot's button over
+ * the image at its percentage position and styles the Popover it opens.
+ *
+ * Themes adjust the look through custom properties, set on `:root`, on
+ * `.hotspot-field` or on any ancestor:
+ *
+ * --hotspot-field-marker-size          Visible marker diameter (default 1.5rem).
+ * --hotspot-field-marker-color         Marker fill (default #d63638).
+ * --hotspot-field-marker-border-color  Marker outline (default #fff).
+ * --hotspot-field-marker-hover-scale   Marker growth under the pointer (default 1.15; 1 turns it off).
+ * --hotspot-field-touch-target         Minimum tappable size (default 44px).
+ * --hotspot-field-focus-ring-color     Keyboard focus ring (default #2271b1).
+ * --hotspot-field-focus-ring-width     Keyboard focus ring width (default 3px).
+ * --hotspot-field-popover-background   Popover background (default #fff).
+ * --hotspot-field-popover-color        Popover text colour (default #1e1e1e).
+ * --hotspot-field-popover-border       Popover border (default 1px solid rgb(0 0 0 / 15%)).
+ * --hotspot-field-popover-radius       Popover corner radius (default 0.5rem).
+ * --hotspot-field-popover-shadow       Popover shadow (default 0 4px 16px rgb(0 0 0 / 20%)).
+ * --hotspot-field-popover-padding      Popover padding (default 0.75rem 1rem).
+ * --hotspot-field-popover-max-width    Popover maximum width (default 20rem).
  */
 .hotspot-field {
 	display: inline-block;
@@ -16,19 +33,56 @@
 	height: auto;
 }
 
+/* The button is the touch target; the visible marker is drawn inside it. */
 .hotspot-field__hotspot {
 	position: absolute;
 	box-sizing: border-box;
-	width: 1.5rem;
-	height: 1.5rem;
+	width: max(var(--hotspot-field-touch-target, 44px), var(--hotspot-field-marker-size, 1.5rem));
+	height: max(var(--hotspot-field-touch-target, 44px), var(--hotspot-field-marker-size, 1.5rem));
 	margin: 0;
 	padding: 0;
-	border: 2px solid #fff;
+	border: 0;
 	border-radius: 50%;
-	background: #d63638;
-	box-shadow: 0 1px 3px rgb(0 0 0 / 40%);
+	background: transparent;
 	cursor: pointer;
 	transform: translate(-50%, -50%);
+	-webkit-tap-highlight-color: transparent;
+}
+
+.hotspot-field__hotspot::before {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	box-sizing: border-box;
+	width: var(--hotspot-field-marker-size, 1.5rem);
+	height: var(--hotspot-field-marker-size, 1.5rem);
+	border: 2px solid var(--hotspot-field-marker-border-color, #fff);
+	border-radius: 50%;
+	background: var(--hotspot-field-marker-color, #d63638);
+	box-shadow: 0 1px 3px rgb(0 0 0 / 40%);
+	transform: translate(-50%, -50%);
+}
+
+@media (hover: hover) {
+	.hotspot-field__hotspot:hover::before {
+		transform: translate(-50%, -50%) scale(var(--hotspot-field-marker-hover-scale, 1.15));
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.hotspot-field__hotspot::before {
+		transition: transform 0.15s ease-out;
+	}
+}
+
+.hotspot-field__hotspot:focus {
+	outline: none;
+}
+
+.hotspot-field__hotspot:focus-visible {
+	outline: var(--hotspot-field-focus-ring-width, 3px) solid var(--hotspot-field-focus-ring-color, #2271b1);
+	outline-offset: 2px;
 }
 
 .hotspot-field__label {
@@ -41,4 +95,32 @@
 	clip-path: inset(50%);
 	white-space: nowrap;
 	border: 0;
+}
+
+.hotspot-field__popover {
+	box-sizing: border-box;
+	max-width: min(var(--hotspot-field-popover-max-width, 20rem), calc(100vw - 16px));
+	max-height: calc(100vh - 16px);
+	padding: var(--hotspot-field-popover-padding, 0.75rem 1rem);
+	overflow: auto;
+	border: var(--hotspot-field-popover-border, 1px solid rgb(0 0 0 / 15%));
+	border-radius: var(--hotspot-field-popover-radius, 0.5rem);
+	background: var(--hotspot-field-popover-background, #fff);
+	box-shadow: var(--hotspot-field-popover-shadow, 0 4px 16px rgb(0 0 0 / 20%));
+	color: var(--hotspot-field-popover-color, #1e1e1e);
+	line-height: 1.5;
+	text-align: start;
+}
+
+.hotspot-field__popover-label,
+.hotspot-field__popover-description {
+	margin: 0;
+}
+
+.hotspot-field__popover-label {
+	font-weight: 700;
+}
+
+.hotspot-field__popover-description {
+	margin-top: 0.25em;
 }
