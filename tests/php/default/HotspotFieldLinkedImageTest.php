@@ -356,6 +356,79 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 	}
 
 	/**
+	 * In a real preview the current post stays the previewed post while ACF
+	 * reads its fields from the latest revision: the shortcode renders the
+	 * revision's Hotspot Fields, top-level and in rows, with or without a
+	 * post ID.
+	 *
+	 * @dataProvider provide_preview_statuses
+	 *
+	 * @param string $status Status of the previewed post.
+	 */
+	public function test_shortcode_renders_the_revision_in_a_preview( string $status ): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$post_id = $this->create_post();
+		wp_update_post(
+			array(
+				'ID'          => $post_id,
+				'post_status' => $status,
+			)
+		);
+
+		// The unsaved changes being previewed: another cover image.
+		$revision_id = _wp_put_post_revision( get_post( $post_id ), true );
+		$this->assertIsInt( $revision_id );
+		acf_copy_postmeta( $post_id, $revision_id );
+		update_metadata( 'post', $revision_id, 'cover', (string) $this->bedroom_id );
+
+		$this->go_to(
+			add_query_arg(
+				array(
+					'p'          => $post_id,
+					'preview'    => 'true',
+					'preview_id' => $post_id,
+				),
+				home_url( '/' )
+			)
+		);
+		$this->assertTrue( is_preview() );
+		$this->assertTrue( have_posts() );
+		the_post();
+		$this->assertSame( $post_id, get_the_ID() );
+		$this->assertSame( $revision_id, acf_get_valid_post_id( $post_id ), 'ACF reads the preview from the revision.' );
+
+		$this->assertRendersImage( $this->bedroom_id, do_shortcode( '[hotspot_field name="house_hotspots"]' ) );
+		$this->assertRendersImage( $this->bedroom_id, do_shortcode( sprintf( '[hotspot_field name="house_hotspots" post_id="%d"]', $post_id ) ) );
+
+		$this->assertSame(
+			array(
+				array( $this->kitchen_id, 1 ),
+				array( $this->bedroom_id, 2 ),
+			),
+			$this->render_rows( 'rooms', false, static fn () => do_shortcode( '[hotspot_field name="room_hotspots"]' ) )
+		);
+		$this->assertSame(
+			array(
+				array( $this->kitchen_id, 1 ),
+				array( $this->bedroom_id, 2 ),
+			),
+			$this->render_rows( 'rooms', $post_id, static fn () => do_shortcode( sprintf( '[hotspot_field name="room_hotspots" post_id="%d"]', $post_id ) ) )
+		);
+	}
+
+	/**
+	 * Statuses of posts an editor previews.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function provide_preview_statuses(): array {
+		return array(
+			'published' => array( 'publish' ),
+			'draft'     => array( 'draft' ),
+		);
+	}
+
+	/**
 	 * A sub field's name outside its row is not a top-level field: nothing is
 	 * rendered.
 	 */
@@ -568,9 +641,9 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 	 * Renders something in each row of a top-level repeater or flexible
 	 * content field.
 	 *
-	 * @param string     $selector Field name.
-	 * @param int|string $post_id  ACF post ID.
-	 * @param callable   $render   Returns the markup for the current row.
+	 * @param string           $selector Field name.
+	 * @param int|string|false $post_id ACF post ID; false for the current post.
+	 * @param callable         $render   Returns the markup for the current row.
 	 * @return list<string> Markup per row.
 	 */
 	private function render_rows_raw( string $selector, $post_id, callable $render ): array {
@@ -588,12 +661,12 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 	 * Renders something in each row and reads back the image and the number
 	 * of Hotspots of each render.
 	 *
-	 * @param string     $selector Field name.
-	 * @param int|string $post_id  ACF post ID.
-	 * @param callable   $render   Returns the markup for the current row.
+	 * @param string           $selector Field name.
+	 * @param int|string|false $post_id ACF post ID; false for the current post.
+	 * @param callable         $render   Returns the markup for the current row.
 	 * @return list<array{int, int}> Attachment ID and number of Hotspots per row.
 	 */
-	private function render_rows( string $selector, int $post_id, callable $render ): array {
+	private function render_rows( string $selector, $post_id, callable $render ): array {
 		return array_map(
 			fn ( string $html ): array => array( $this->rendered_image_id( $html ), substr_count( $html, '<button' ) ),
 			$this->render_rows_raw( $selector, $post_id, $render )

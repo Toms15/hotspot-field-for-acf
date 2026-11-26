@@ -65,7 +65,9 @@ final class Shortcode {
 	/**
 	 * Whether visitors may see a Hotspot Field read from another post than
 	 * the one can_show() checked: a field of a have_rows() row is read from
-	 * the loop's post, which a theme may have opened on any post.
+	 * the loop's post, which a theme may have opened on any post. In a
+	 * preview ACF reads the checked post's fields from its latest revision,
+	 * which counts as the checked post.
 	 *
 	 * @param int|string $source_id ACF post ID the field was read from.
 	 * @param int|null   $post_id   Requested post ID; null for the current post.
@@ -75,9 +77,14 @@ final class Shortcode {
 			return true;
 		}
 
+		$source_id  = (int) $source_id;
 		$checked_id = $post_id ?? (int) get_the_ID();
 
-		return (int) $source_id === $checked_id || self::can_show( (int) $source_id );
+		if ( $source_id === $checked_id || ( $checked_id && (int) wp_is_post_revision( $source_id ) === $checked_id ) ) {
+			return true;
+		}
+
+		return self::can_show( $source_id );
 	}
 
 	/**
