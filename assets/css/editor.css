@@ -157,3 +157,17 @@
 .hotspot-field-editor__row-error[hidden] {
 	display: none;
 }
+
+/*
+ * Why there is no image: no image chosen yet, or no Linked Image Field.
+ */
+.hotspot-field-editor__message {
+	margin: 0 0 8px;
+	padding: 8px 12px;
+	border-left: 4px solid #dba617;
+	background: #fcf9e8;
+}
+
+.hotspot-field-editor__message:empty {
+	display: none;
+}

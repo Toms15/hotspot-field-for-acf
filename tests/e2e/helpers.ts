@@ -22,7 +22,7 @@ export async function openEditor( page: Page, postId: number ): Promise< void > 
 		await metaBoxes.press( 'Enter' );
 		await expect( metaBoxes ).toHaveAttribute( 'aria-expanded', 'true' );
 	}
-	await page.locator( '.acf-field-hotspot' ).scrollIntoViewIfNeeded();
+	await page.locator( '.acf-field-hotspot' ).first().scrollIntoViewIfNeeded();
 }
 
 /**

@@ -7,6 +7,13 @@
  * failed save, rows whose Hotspot needs a Label say so. The list is
  * kept, as JSON, in the field's hidden input, which ACF saves with the rest of
  * the form.
+ *
+ * The image comes from the Linked Image Field: the field with that name next
+ * to the Hotspot Field (same field group, repeater row, flexible content
+ * layout or group) or, when there is none, at the nearest enclosing level. It
+ * is replaced as soon as that field changes; Hotspots keep their positions,
+ * which are percentages of the image. A message says when no image has been
+ * chosen yet, or when the Linked Image Field cannot be found.
  */
 ( function ( $, acf ) {
 	'use strict';
@@ -31,11 +38,31 @@
 			position: '%1$s, %2$s across, %3$s down',
 			reordered: '%1$s moved to position %2$s of %3$s.',
 			removed: '%s removed.',
+			noImage: 'No image chosen yet. Choose an image in the “%s” field to place Hotspots on it.',
+			notFound: 'Linked Image Field not found. Ask the site builder to check which image field this Hotspot Field is linked to.',
 		},
 		window.hotspotFieldEditor || {}
 	);
 
 	let uniqueId = 0;
+
+	/**
+	 * Hotspot Field editors on the page, so a change in any field can reach
+	 * the editors linked to it.
+	 */
+	const editors = new Set();
+
+	$( document ).on( 'change', '.acf-field input', ( event ) => {
+		editors.forEach( ( editor ) => {
+			if ( ! editor.$el.get( 0 ).isConnected ) {
+				editors.delete( editor );
+			} else if ( editor.linked?.$el.get( 0 ).contains( event.target ) ) {
+				// ACF updates the image field's preview right after the
+				// change: wait for it.
+				window.setTimeout( () => editor.refreshImage() );
+			}
+		} );
+	} );
 
 	/**
 	 * Fills in a translated string's numbered (%1$s) or plain (%s) placeholders.
@@ -160,7 +187,13 @@
 			this.status.setAttribute( 'role', 'status' );
 			this.status.setAttribute( 'aria-live', 'polite' );
 			this.statusTimer = 0;
+			// A duplicated repeater row brings a copy of the original's.
+			control.querySelectorAll( '.hotspot-field-editor__status' ).forEach( ( node ) => node.remove() );
 			control.append( this.status );
+
+			// Says why there is no image to place Hotspots on.
+			this.message = control.querySelector( '.hotspot-field-editor__message' );
+			this.imageRequest = 0;
 
 			this.image = element( 'img', { className: 'hotspot-field-editor__image', alt: strings.imageAlt, draggable: false } );
 			this.markers = element( 'div', { className: 'hotspot-field-editor__markers' } );
@@ -178,19 +211,57 @@
 			this.list.addEventListener( 'focusin', ( event ) => this.onRowActivate( event ) );
 			this.list.addEventListener( 'click', ( event ) => this.onListClick( event ) );
 
-			this.loadImage( control.dataset.linkedImageField || '' );
+			this.linked = this.findLinkedField( control.dataset.linkedImageField || '' );
+			editors.add( this );
+			this.refreshImage();
 			this.renderHotspots();
 		},
 
 		/**
-		 * Shows the image chosen in the Linked Image Field of the same field
-		 * group.
+		 * Finds the Linked Image Field: next to the Hotspot Field first, then
+		 * next to each field that encloses it (a repeater, flexible content or
+		 * group field), and finally among the top-level fields of the other
+		 * field groups on the screen. Fields inside an ACF block only see the
+		 * fields of that block.
 		 *
 		 * @param {string} name Linked Image Field name.
+		 * @return {?Object} The Linked Image Field, or null.
 		 */
-		loadImage( name ) {
-			const linked = name ? acf.getFields( { name, sibling: this.$el, limit: 1 } )[ 0 ] : null;
+		findLinkedField( name ) {
+			if ( ! name ) {
+				return null;
+			}
+
+			for ( let level = this; level; level = level.parent() ) {
+				const sibling = acf.getFields( { name, sibling: level.$el, limit: 1 } )[ 0 ];
+				if ( sibling ) {
+					return sibling;
+				}
+			}
+
+			const block = this.$el.closest( '.acf-block-fields' );
+			const fields = acf.getFields( block.length ? { name, parent: block } : { name } );
+			return (
+				fields.find( ( field ) => ! field.parent() && ( block.length || ! field.$el.closest( '.acf-block-fields' ).length ) ) ||
+				null
+			);
+		},
+
+		/**
+		 * Shows the Linked Image Field's current image, or says why there is
+		 * none.
+		 */
+		refreshImage() {
+			const request = ++this.imageRequest;
+			const linked = this.linked;
 			if ( ! linked ) {
+				this.showMessage( strings.notFound );
+				return;
+			}
+
+			const attachmentId = parseInt( linked.val(), 10 ) || 0;
+			if ( ! attachmentId ) {
+				this.showMessage( format( strings.noImage, this.fieldLabel( linked ) ) );
 				return;
 			}
 
@@ -200,14 +271,14 @@
 			}
 
 			// The preview is usually small: replace it with a larger size.
-			const attachmentId = parseInt( linked.val(), 10 );
-			if ( attachmentId && window.wp?.media?.attachment ) {
+			if ( window.wp?.media?.attachment ) {
 				const attachment = window.wp.media.attachment( attachmentId );
 				Promise.resolve( attachment.fetch() )
 					.then( () => {
 						const sizes = attachment.get( 'sizes' ) || {};
 						const url = ( sizes.large || sizes.full || {} ).url || attachment.get( 'url' );
-						if ( url ) {
+						// Unless the image changed again in the meantime.
+						if ( url && request === this.imageRequest ) {
 							this.showImage( url );
 						}
 					} )
@@ -217,11 +288,41 @@
 		},
 
 		/**
+		 * The label of a field, as the editor sees it, without the required
+		 * marker; its name when it has no label.
+		 *
+		 * @param {Object} field ACF field.
+		 * @return {string} Label.
+		 */
+		fieldLabel( field ) {
+			// In a table layout, a repeater's sub fields are labelled by the
+			// column headings.
+			const label = field.$labelWrap().find( 'label' ).first().get( 0 ) || field.$el.closest( 'table' ).find( `th[data-key="${ field.get( 'key' ) }"]` ).get( 0 );
+			const copy = label?.cloneNode( true );
+			copy?.querySelectorAll( '.acf-required' ).forEach( ( node ) => node.remove() );
+			return copy?.textContent.trim() || field.get( 'name' ) || '';
+		},
+
+		/**
 		 * @param {string} url Image URL.
 		 */
 		showImage( url ) {
+			this.message.textContent = '';
 			this.image.src = url;
 			this.canvas.hidden = false;
+		},
+
+		/**
+		 * Hides the image and says why there is none. The Hotspots stay in the
+		 * list, so their text can still be edited.
+		 *
+		 * @param {string} text Message.
+		 */
+		showMessage( text ) {
+			this.cancelDrag();
+			this.canvas.hidden = true;
+			this.image.removeAttribute( 'src' );
+			this.message.textContent = text;
 		},
 
 		/**
@@ -453,6 +554,9 @@
 		 * before the drag.
 		 */
 		cancelDrag() {
+			if ( ! this.drag ) {
+				return;
+			}
 			const { index, pointerId, startX, startY } = this.drag;
 			this.drag = null;
 			const marker = this.markerAt( index );
