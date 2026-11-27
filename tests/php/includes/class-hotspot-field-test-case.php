@@ -102,17 +102,21 @@ abstract class Hotspot_Field_Test_Case extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The ACF test blocks, one per ACF block version; each holds an image
+	 * The ACF test blocks: one per ACF block version, rendering through a
+	 * template, and two rendering through a callback, registered from
+	 * block.json and with acf_register_block_type(). Each holds an image
 	 * field `photo` and a Hotspot Field `hotspots` linked to it, and renders
 	 * it with hotspot_field_render() unless a test picks another entry point
 	 * (see render_blocks()).
 	 *
-	 * @return array<string, array{string}> Block name, by ACF block version.
+	 * @return array<string, array{string}> Block name, by kind of block.
 	 */
 	public static function block_names(): array {
 		return array(
-			'ACF block version 2' => array( 'acf/hotspot-test-v2' ),
-			'ACF block version 3' => array( 'acf/hotspot-test-v3' ),
+			'ACF block version 2'                   => array( 'acf/hotspot-test-v2' ),
+			'ACF block version 3'                   => array( 'acf/hotspot-test-v3' ),
+			'ACF block.json block with a callback'  => array( 'acf/hotspot-test-callback' ),
+			'ACF block registered in PHP, callback' => array( 'acf/hotspot-test-php-callback' ),
 		);
 	}
 

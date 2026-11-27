@@ -1,7 +1,8 @@
 <?php
 /**
- * Render template of the test blocks: the block's Hotspot Field on the image
- * of its Linked Image Field, through hotspot_field_render(). PHPUnit tests
+ * Render template of the test blocks (and markup of their render callback):
+ * the block's Hotspot Field on the image of its Linked Image Field, through
+ * hotspot_field_render(). PHPUnit tests
  * use the `hotspot_field_tests_block_markup` filter to render it through
  * another entry point instead.
  *

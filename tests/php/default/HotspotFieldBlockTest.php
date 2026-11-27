@@ -9,7 +9,8 @@
  * A Hotspot Field in an ACF block renders the block's own Hotspots on the
  * block's own image, through every entry point, on the frontend, in previews
  * and in the block editor's previews. Each test runs with both ACF block
- * versions (see tests/fixtures/hotspot-test-blocks).
+ * versions and with blocks rendering through a callback (see
+ * tests/fixtures/hotspot-test-blocks).
  *
  * The post holding the block also has a top-level image field `photo` and a
  * Hotspot Field `hotspots` (see Hotspot_Field_Test_Case), with another image
@@ -293,15 +294,17 @@ class HotspotFieldBlockTest extends Hotspot_Field_Test_Case {
 	/**
 	 * A block rendered inside a row of a loop that an enclosing block's
 	 * template opened shows its own Hotspots, as the loop is open around it;
-	 * back in the enclosing block, the row's Hotspots render again.
+	 * back in the enclosing block, the row's Hotspots render again. Whether
+	 * each block renders through a template or a callback.
 	 *
-	 * @dataProvider block_names
+	 * @dataProvider provide_nested_blocks
 	 *
-	 * @param string $block_name Test block.
+	 * @param string $block_name Test block enclosing the other.
+	 * @param string $inner_name Nested test block.
 	 */
-	public function test_a_nested_block_ignores_the_loop_of_the_enclosing_block( string $block_name ): void {
+	public function test_a_nested_block_ignores_the_loop_of_the_enclosing_block( string $block_name, string $inner_name ): void {
 		$foreign = $this->create_gallery( 'post' );
-		$inner   = $this->block_markup( $block_name, $this->block_image, self::BLOCK_HOTSPOTS );
+		$inner   = $this->block_markup( $inner_name, $this->block_image, self::BLOCK_HOTSPOTS );
 		$this->go_to_post_with_block( $block_name, $this->post_image );
 		$depth = 0;
 
@@ -333,6 +336,25 @@ class HotspotFieldBlockTest extends Hotspot_Field_Test_Case {
 		$this->assertRendersBlock( (string) $inner->ownerDocument->saveHTML( $inner ) ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM property.
 		$this->assertSame( 1, $row->length );
 		$this->assertSame( 'Foreign row', trim( $row->item( 0 )->textContent ) ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM property.
+	}
+
+	/**
+	 * Each test block nested in itself, and a block rendering through a
+	 * callback nested in one rendering through a template, and the reverse.
+	 *
+	 * @return array<string, array{string, string}>
+	 */
+	public static function provide_nested_blocks(): array {
+		$cases = array();
+
+		foreach ( self::block_names() as $kind => list( $block_name ) ) {
+			$cases[ "{$kind} in itself" ] = array( $block_name, $block_name );
+		}
+
+		$cases['callback block in template block'] = array( 'acf/hotspot-test-v3', 'acf/hotspot-test-php-callback' );
+		$cases['template block in callback block'] = array( 'acf/hotspot-test-callback', 'acf/hotspot-test-v2' );
+
+		return $cases;
 	}
 
 	/**

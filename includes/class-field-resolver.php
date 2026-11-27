@@ -25,20 +25,73 @@ defined( 'ABSPATH' ) || exit;
 final class Field_Resolver {
 
 	/**
-	 * ACF blocks whose templates are rendering, outermost first: each one's
-	 * ACF ID and how many `have_rows()` loops were open as it started.
+	 * ACF blocks that are rendering, outermost first: each one's ACF ID and
+	 * how many `have_rows()` loops were open as it started.
 	 *
 	 * @var list<array{id: string, loops: int}>
 	 */
 	private static array $blocks = array();
 
 	/**
-	 * Follows ACF block templates as they render, so a Hotspot Field inside a
-	 * block tells loops opened by the block from loops open around it.
+	 * Follows ACF blocks as they render, through a template or a callback, so
+	 * a Hotspot Field inside a block tells loops opened by the block from
+	 * loops open around it.
 	 */
 	public static function register(): void {
 		add_action( 'acf/blocks/pre_block_template_render', array( self::class, 'start_block' ) );
 		add_action( 'acf/blocks/post_block_template_render', array( self::class, 'end_block' ) );
+		add_filter( 'acf/register_block_type_args', array( self::class, 'follow_php_block_callback' ) );
+		// After ACF adds its namespace to the block's name (priority 10).
+		add_filter( 'block_type_metadata', array( self::class, 'follow_json_block_callback' ), 20 );
+	}
+
+	/**
+	 * Follows the render callback of a block registered with
+	 * acf_register_block_type(), as ACF announces template renders only.
+	 *
+	 * @param mixed $block Block type settings.
+	 * @return mixed The settings, with the callback followed.
+	 */
+	public static function follow_php_block_callback( $block ) {
+		if ( is_array( $block ) && is_callable( $block['render_callback'] ?? null ) ) {
+			$block['render_callback'] = self::followed_callback( $block['render_callback'] );
+		}
+
+		return $block;
+	}
+
+	/**
+	 * Follows the render callback (`acf.renderCallback`) of an ACF block
+	 * registered from block.json, as ACF announces template renders only.
+	 *
+	 * @param mixed $metadata Block metadata.
+	 * @return mixed The metadata, with the callback followed.
+	 */
+	public static function follow_json_block_callback( $metadata ) {
+		if ( is_array( $metadata ) && is_array( $metadata['acf'] ?? null ) && is_callable( $metadata['acf']['renderCallback'] ?? null ) ) {
+			$metadata['acf']['renderCallback'] = self::followed_callback( $metadata['acf']['renderCallback'] );
+		}
+
+		return $metadata;
+	}
+
+	/**
+	 * A block render callback that remembers, while it runs, how many
+	 * `have_rows()` loops were open as the block started rendering, as
+	 * start_block() and end_block() do for templates.
+	 *
+	 * @param callable $callback The block's render callback.
+	 */
+	private static function followed_callback( callable $callback ): \Closure {
+		return static function ( $block, ...$args ) use ( $callback ) {
+			self::start_block( $block );
+
+			try {
+				return $callback( $block, ...$args );
+			} finally {
+				self::end_block();
+			}
+		};
 	}
 
 	/**
@@ -205,8 +258,8 @@ final class Field_Resolver {
 	}
 
 	/**
-	 * Remembers how many `have_rows()` loops are open as an ACF block's
-	 * template starts rendering. A stack, as blocks nest (InnerBlocks).
+	 * Remembers how many `have_rows()` loops are open as an ACF block starts
+	 * rendering. A stack, as blocks nest (InnerBlocks).
 	 *
 	 * @param array $block The block being rendered.
 	 */
@@ -218,7 +271,7 @@ final class Field_Resolver {
 	}
 
 	/**
-	 * Forgets the block whose template has rendered.
+	 * Forgets the block that has rendered.
 	 */
 	public static function end_block(): void {
 		array_pop( self::$blocks );
@@ -226,8 +279,9 @@ final class Field_Resolver {
 
 	/**
 	 * How many `have_rows()` loops were open as a block started rendering.
-	 * ACF announces the rendering of block templates only; for a block that
-	 * renders through a callback, every loop counts as opened before it.
+	 * For a block whose start was not followed (a render callback wrapped by
+	 * other code after registration, or an ACF release without the template
+	 * hooks), every loop counts as opened before it.
 	 *
 	 * @param string $block_id The block's ACF ID.
 	 */
