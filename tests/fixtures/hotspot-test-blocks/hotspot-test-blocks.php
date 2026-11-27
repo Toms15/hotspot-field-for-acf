@@ -12,13 +12,15 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Test blocks, by name: one per ACF block version, as sites built with older
- * ACF releases use version 2 and newer ones version 3. Each holds an image
- * field `photo` and a Hotspot Field `hotspots` linked to it, and renders the
- * Hotspot Field with hotspot_field_render().
+ * ACF releases use version 2 and newer ones version 3, and one that stores
+ * its values in the post's meta (`usePostMeta`) instead of the block. Each
+ * holds an image field `photo` and a Hotspot Field `hotspots` linked to it,
+ * and renders the Hotspot Field with hotspot_field_render().
  */
 const HOTSPOT_FIELD_TEST_BLOCKS = array(
-	'acf/hotspot-test-v2' => 'hotspot-v2',
-	'acf/hotspot-test-v3' => 'hotspot-v3',
+	'acf/hotspot-test-v2'   => 'hotspot-v2',
+	'acf/hotspot-test-v3'   => 'hotspot-v3',
+	'acf/hotspot-test-meta' => 'hotspot-meta',
 );
 
 add_action(

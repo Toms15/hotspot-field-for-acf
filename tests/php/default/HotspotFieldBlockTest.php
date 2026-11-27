@@ -52,6 +52,28 @@ class HotspotFieldBlockTest extends Hotspot_Field_Test_Case {
 	);
 
 	/**
+	 * Hotspots with quotes and backslashes in their Labels and Descriptions.
+	 *
+	 * @var array<int, array<string, mixed>>
+	 */
+	private const QUOTED_HOTSPOTS = array(
+		array(
+			'x'           => 10,
+			'y'           => 20,
+			'label'       => 'Say "hi"',
+			'description' => 'Saved in C:\\Rooms\\Lamp',
+		),
+		array(
+			'x'           => 30,
+			'y'           => 40,
+			// Not at the end: ACF's block serializer breaks the block's
+			// JSON when a value ends with a backslash, whatever the field.
+			'label'       => 'Back\\slash',
+			'description' => '',
+		),
+	);
+
+	/**
 	 * Image of the block's `photo` field.
 	 *
 	 * @var int
@@ -209,28 +231,108 @@ class HotspotFieldBlockTest extends Hotspot_Field_Test_Case {
 	 * @param string $source     `post` for another post, or `option`.
 	 */
 	public function test_a_block_ignores_a_rows_loop_left_open_on_another_object( string $block_name, string $source ): void {
-		$foreign = 'option' === $source ? 'option' : self::factory()->post->create();
-		update_field(
-			'field_hotspot_block_tests_gallery',
-			array(
-				array(
-					'field_hotspot_block_tests_gallery_photo'    => $this->post_image,
-					'field_hotspot_block_tests_gallery_hotspots' => array(
-						array(
-							'x'     => 50,
-							'y'     => 50,
-							'label' => 'Foreign row',
-						),
-					),
-				),
-			),
-			$foreign
-		);
+		$foreign = $this->create_gallery( $source );
 		$this->go_to_post_with_block( $block_name, $this->block_image );
 		$this->open_foreign_rows_loop( 'gallery', $foreign );
 
 		$this->assertRendersBlock( $this->render_blocks( get_the_content() ) );
 		$this->assertRendersBlock( $this->render_blocks( get_the_content(), static fn () => do_shortcode( '[hotspot_field name="hotspots"]' ) ) );
+	}
+
+	/**
+	 * A have_rows() loop the block's own template opens, on another object,
+	 * shows each row's Hotspots on the row's image, as get_sub_field() reads
+	 * the row's fields; once the loop is over, the block's own Hotspot Field
+	 * renders again. With or without a loop left open around the block.
+	 *
+	 * @dataProvider provide_loop_sources
+	 *
+	 * @param string $block_name Test block.
+	 * @param string $source     `post` for another post, or `option`.
+	 */
+	public function test_a_rows_loop_opened_by_the_block_shows_the_rows_hotspots( string $block_name, string $source ): void {
+		$foreign = $this->create_gallery( $source );
+		$this->go_to_post_with_block( $block_name, $this->block_image );
+		$content = get_the_content();
+
+		$render = function () use ( $foreign ): string {
+			$rows = $this->render_foreign_rows(
+				'gallery',
+				$foreign,
+				static fn () => hotspot_field_render( 'hotspots' ) . do_shortcode( '[hotspot_field name="hotspots"]' )
+			);
+
+			return implode( '', $rows ) . '<div class="after-loop">' . hotspot_field_render( 'hotspots' ) . '</div>';
+		};
+
+		foreach ( array( 'no loop around the block', 'a loop left open around the block' ) as $context ) {
+			if ( 'a loop left open around the block' === $context ) {
+				$this->open_foreign_rows_loop( 'gallery', $this->create_gallery( 'option' === $source ? 'post' : 'option' ) );
+			}
+
+			$xpath = $this->parse( $this->render_blocks( $content, $render ) );
+
+			$row_images = array();
+			foreach ( $xpath->query( '//img[not(ancestor::*[@class="after-loop"])]' ) as $image ) {
+				$row_images[] = $image->getAttribute( 'src' );
+			}
+			$row_labels = array();
+			foreach ( $xpath->query( '//button[not(ancestor::*[@class="after-loop"])]' ) as $button ) {
+				$row_labels[] = trim( $button->textContent ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM property.
+			}
+
+			$this->assertSame( array_fill( 0, 2, wp_get_attachment_image_url( $this->post_image, 'large' ) ), $row_images, "The row's image, with {$context}." );
+			$this->assertSame( array( 'Foreign row', 'Foreign row' ), $row_labels, "The row's Hotspots, with {$context}." );
+
+			$after = $xpath->query( '//*[@class="after-loop"]' )->item( 0 );
+			$this->assertNotNull( $after );
+			$this->assertRendersBlock( (string) $after->ownerDocument->saveHTML( $after ) ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM property.
+		}
+	}
+
+	/**
+	 * A block rendered inside a row of a loop that an enclosing block's
+	 * template opened shows its own Hotspots, as the loop is open around it;
+	 * back in the enclosing block, the row's Hotspots render again.
+	 *
+	 * @dataProvider block_names
+	 *
+	 * @param string $block_name Test block.
+	 */
+	public function test_a_nested_block_ignores_the_loop_of_the_enclosing_block( string $block_name ): void {
+		$foreign = $this->create_gallery( 'post' );
+		$inner   = $this->block_markup( $block_name, $this->block_image, self::BLOCK_HOTSPOTS );
+		$this->go_to_post_with_block( $block_name, $this->post_image );
+		$depth = 0;
+
+		$html = $this->render_blocks(
+			get_the_content(),
+			function () use ( $foreign, $inner, &$depth ): ?string {
+				// The nested block renders its field with hotspot_field_render().
+				if ( $depth > 0 ) {
+					return null;
+				}
+
+				++$depth;
+				$rows = $this->render_foreign_rows(
+					'gallery',
+					$foreign,
+					static fn () => '<div class="inner">' . do_blocks( $inner ) . '</div><div class="row">' . hotspot_field_render( 'hotspots' ) . '</div>'
+				);
+				--$depth;
+
+				return implode( '', $rows );
+			}
+		);
+
+		$xpath = $this->parse( $html );
+		$inner = $xpath->query( '//*[@class="inner"]' )->item( 0 );
+		$row   = $xpath->query( '//*[@class="row"]//button' );
+
+		$this->assertNotNull( $inner );
+		$this->assertRendersBlock( (string) $inner->ownerDocument->saveHTML( $inner ) ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM property.
+		$this->assertSame( 1, $row->length );
+		$this->assertSame( 'Foreign row', trim( $row->item( 0 )->textContent ) ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM property.
 	}
 
 	/**
@@ -344,22 +446,7 @@ class HotspotFieldBlockTest extends Hotspot_Field_Test_Case {
 	 * @param string $block_name Test block.
 	 */
 	public function test_quotes_and_backslashes_are_kept_in_a_block( string $block_name ): void {
-		$hotspots = array(
-			array(
-				'x'           => 10,
-				'y'           => 20,
-				'label'       => 'Say "hi"',
-				'description' => 'Saved in C:\\Rooms\\Lamp',
-			),
-			array(
-				'x'           => 30,
-				'y'           => 40,
-				// Not at the end: ACF's block serializer breaks the block's
-				// JSON when a value ends with a backslash, whatever the field.
-				'label'       => 'Back\\slash',
-				'description' => '',
-			),
-		);
+		$hotspots = self::QUOTED_HOTSPOTS;
 		$block    = $this->block_markup( $block_name, $this->block_image, $hotspots );
 		$post_id  = $this->create_post_with_blocks( $block );
 		$this->go_to_post( $post_id );
@@ -370,42 +457,72 @@ class HotspotFieldBlockTest extends Hotspot_Field_Test_Case {
 		);
 
 		foreach ( $renders as $context => $html ) {
-			$xpath = $this->parse( $html );
-			$texts = array();
-			foreach ( $xpath->query( '//button | //*[@popover]/p' ) as $node ) {
-				$texts[] = trim( $node->textContent ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM property.
-			}
-
-			$this->assertSame( array( 'Say "hi"', 'Say "hi"', 'Saved in C:\\Rooms\\Lamp', 'Back\\slash', 'Back\\slash' ), $texts, "Labels and Descriptions in the {$context}" );
+			$this->assertQuotedTexts( $html, $context );
 		}
 	}
 
 	/**
-	 * ACF validates a block's values as stored in the block: a quote in one
-	 * Label neither hides the Hotspots nor the one without a Label, and a
-	 * Label of a backslash counts as a Label.
+	 * ACF validates a block's values as stored in the block, under the
+	 * block's input names: a quote in one Label neither hides the Hotspots
+	 * nor the one without a Label, and a Label of a backslash counts as a
+	 * Label.
 	 *
-	 * @dataProvider block_names
+	 * @dataProvider provide_every_block
 	 *
 	 * @param string $block_name Test block.
 	 */
 	public function test_validation_reads_a_blocks_values_as_stored( string $block_name ): void {
-		$field_key = 'field_' . str_replace( array( 'acf/', '-' ), array( '', '_' ), $block_name ) . '_hotspots';
-		$field     = acf_get_field( $field_key );
-		$input     = "acf-block_0123456789abcdef[{$field_key}]";
-		$hotspot   = static fn ( string $label ): array => array(
+		$hotspot = static fn ( string $label ): array => array(
 			'x'           => 50,
 			'y'           => 50,
 			'label'       => $label,
 			'description' => '',
 		);
 
-		acf_reset_validation_errors();
-		$this->assertFalse( acf_validate_value( (string) wp_json_encode( array( $hotspot( 'Say "hi"' ), $hotspot( '' ) ) ), $field, $input ) );
-		$this->assertSame( array( 'Hotspot 2 needs a Label.' ), array_column( (array) acf_get_validation_errors(), 'message' ) );
+		$this->assertSame(
+			array( 'Hotspot 2 needs a Label.' ),
+			$this->validate_block( $this->block_markup( $block_name, $this->block_image, array( $hotspot( 'Say "hi"' ), $hotspot( '' ) ) ) )
+		);
+		$this->assertSame(
+			array(),
+			$this->validate_block( $this->block_markup( $block_name, $this->block_image, array( $hotspot( '\\' ) ) ) )
+		);
+	}
 
-		acf_reset_validation_errors();
-		$this->assertTrue( acf_validate_value( (string) wp_json_encode( array( $hotspot( '\\' ) ) ), $field, $input ) );
+	/**
+	 * A block that stores its values in the post's meta (`usePostMeta`)
+	 * keeps quotes and backslashes in its Labels and Descriptions when the
+	 * post is saved, as ACF hands the field the block's JSON unslashed under
+	 * the post's ID; get_field() on the post and the block on the page show
+	 * them.
+	 */
+	public function test_a_block_saving_to_post_meta_keeps_quotes_and_backslashes(): void {
+		$hotspots = self::QUOTED_HOTSPOTS;
+		$post_id  = $this->create_post_with_blocks( $this->block_markup( self::META_BLOCK, $this->block_image, $hotspots ) );
+
+		$this->assertSame(
+			array( 'Say "hi"', 'Back\\slash' ),
+			array_column( (array) get_field( 'hotspots', $post_id ), 'label' ),
+			'Labels read with get_field() on the post.'
+		);
+		$this->assertSame(
+			array( 'Saved in C:\\Rooms\\Lamp', '' ),
+			array_column( (array) get_field( 'hotspots', $post_id ), 'description' ),
+			'Descriptions read with get_field() on the post.'
+		);
+
+		$this->go_to_post( $post_id );
+		$this->assertQuotedTexts( $this->render_blocks( get_the_content() ), 'page' );
+	}
+
+	/**
+	 * Every test block: one per ACF block version and the one saving to
+	 * post meta.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function provide_every_block(): array {
+		return self::block_names() + array( 'ACF block saving to post meta' => array( self::META_BLOCK ) );
 	}
 
 	/**
@@ -420,6 +537,51 @@ class HotspotFieldBlockTest extends Hotspot_Field_Test_Case {
 		$post_id = $this->create_post_with_blocks( $this->block_markup( $block_name, $image_id, self::BLOCK_HOTSPOTS ) );
 		$this->set_post_fields( $post_id );
 		$this->go_to_post( $post_id );
+	}
+
+	/**
+	 * Stores a `gallery` row with the post image and one Hotspot, `Foreign
+	 * row`, on another object than the post holding the block.
+	 *
+	 * @param string $source `post` for another post, or `option`.
+	 * @return int|string ACF post ID of the gallery.
+	 */
+	private function create_gallery( string $source ) {
+		$foreign = 'option' === $source ? 'option' : self::factory()->post->create();
+		update_field(
+			'field_hotspot_block_tests_gallery',
+			array(
+				array(
+					'field_hotspot_block_tests_gallery_photo'    => $this->post_image,
+					'field_hotspot_block_tests_gallery_hotspots' => array(
+						array(
+							'x'     => 50,
+							'y'     => 50,
+							'label' => 'Foreign row',
+						),
+					),
+				),
+			),
+			$foreign
+		);
+
+		return $foreign;
+	}
+
+	/**
+	 * Asserts that markup shows the Labels and Descriptions of
+	 * QUOTED_HOTSPOTS as written.
+	 *
+	 * @param string $html    Markup.
+	 * @param string $context Where the markup was rendered.
+	 */
+	private function assertQuotedTexts( string $html, string $context ): void { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- PHPUnit naming.
+		$texts = array();
+		foreach ( $this->parse( $html )->query( '//button | //*[@popover]/p' ) as $node ) {
+			$texts[] = trim( $node->textContent ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM property.
+		}
+
+		$this->assertSame( array( 'Say "hi"', 'Say "hi"', 'Saved in C:\\Rooms\\Lamp', 'Back\\slash', 'Back\\slash' ), $texts, "Labels and Descriptions in the {$context}" );
 	}
 
 	/**

@@ -2,14 +2,18 @@ import { type Locator, type Page } from '@playwright/test';
 import {
 	expect,
 	test,
+	blockEditForm,
 	blockPreview,
 	clickAt,
 	createPostWithBlocks,
 	editorCanvas,
+	editorCanvasFrame,
 	expectUniqueIds,
+	isEditorIframed,
 	loadedImage,
 	openBlockEditor,
 	selectBlock,
+	selectedBlockId,
 	TEST_BLOCKS,
 	wp,
 	wpEval,
@@ -233,7 +237,7 @@ test.describe( 'Hotspot Field in ACF blocks', () => {
 
 				await expectRendered( blockPreview( page, 0 ), [ { name: 'Lamp', left: 30, top: 40 } ] );
 				await expectRendered( blockPreview( page, 1 ), [ { name: 'Lamp', left: 30, top: 40 } ] );
-				await expectUniqueIds( page.frame( { name: 'editor-canvas' } )!, '.hotspot-field' );
+				await expectUniqueIds( editorCanvasFrame( page ), '.hotspot-field' );
 
 				await expectImage( await selectBlock( page, 0 ), images.block );
 				await expectImage( await selectBlock( page, 1 ), images.other );
@@ -248,7 +252,7 @@ test.describe( 'Hotspot Field in ACF blocks', () => {
 					{ name: 'Rug', left: 60, top: 60 },
 				] );
 				await expectRendered( blockPreview( page, 0 ), [ { name: 'Lamp', left: 30, top: 40 } ] );
-				await expectUniqueIds( page.frame( { name: 'editor-canvas' } )!, '.hotspot-field' );
+				await expectUniqueIds( editorCanvasFrame( page ), '.hotspot-field' );
 
 				// Each preview's buttons open their own block's Popovers.
 				for ( const index of [ 0, 1 ] ) {
@@ -259,6 +263,96 @@ test.describe( 'Hotspot Field in ACF blocks', () => {
 			} );
 		} );
 	}
+
+	test( 'ACF block version 2 in Edit mode: an editor places, moves, reorders and removes Hotspots inside the block, which keeps the selection and the focus', async ( { page } ) => {
+		const postId = createPost( [ { name: 'acf/hotspot-test-v2', image: images.block, hotspots: [], mode: 'edit' } ] );
+		await openBlockEditor( page, postId );
+		// In an iframed editor ACF shows version 2 blocks in Preview mode
+		// only, with their fields in the block settings sidebar. The editor
+		// is not iframed on WordPress before 7.1 when a version 2 block is
+		// registered: the CI job on the oldest supported WordPress runs this.
+		test.skip( isEditorIframed( page ), 'ACF offers no Edit mode in an iframed editor.' );
+		const block = blockPreview( page, 0 );
+		const clientId = await block.getAttribute( 'data-block' );
+		const blockCount = () => page.evaluate( () => ( window as any ).wp.data.select( 'core/block-editor' ).getBlockCount() );
+
+		// Edit mode: the block's fields, with the block's own image, show
+		// inside the block in the editor's content.
+		const field = await blockEditForm( page, 0 );
+		const image = await expectImage( field, images.block );
+		const rows = field.getByRole( 'listitem' );
+		const marker = ( label: string ) => field.getByRole( 'button', { name: label, exact: true } );
+		// ACF copies the form into the block's data a moment after a change.
+		const blockHotspots = () =>
+			page.evaluate( ( id ) => ( window as any ).wp.data.select( 'core/block-editor' ).getBlockAttributes( id ).data.field_hotspot_test_v2_hotspots, clientId );
+		const expectBlockKept = async (): Promise< void > => {
+			await expect.poll( () => selectedBlockId( page ), 'the block stays selected' ).toBe( clientId );
+			expect( await blockCount(), 'no block was added or removed' ).toBe( 1 );
+			const value = await field.locator( 'input[type="hidden"]' ).inputValue();
+			await expect.poll( blockHotspots, 'the block holds the field\'s Hotspots' ).toBe( value );
+		};
+
+		// Clicking the image adds Hotspots; typing goes to the new Label.
+		await clickAt( image, 0.25, 0.5 );
+		await expect( rows ).toHaveCount( 1 );
+		await expect( rows.nth( 0 ).getByLabel( 'Label' ) ).toBeFocused();
+		await page.keyboard.type( 'Lamp' );
+		await expect( rows.nth( 0 ).getByLabel( 'Label' ) ).toHaveValue( 'Lamp' );
+		await clickAt( image, 0.75, 0.2 );
+		await expect( rows ).toHaveCount( 2 );
+		await expect( rows.nth( 1 ).getByLabel( 'Label' ) ).toBeFocused();
+		await page.keyboard.type( 'Chair' );
+		await expect( rows.nth( 1 ).getByLabel( 'Label' ) ).toHaveValue( 'Chair' );
+		await expectBlockKept();
+
+
+		// Arrow keys move the focused marker, which keeps the focus, rather
+		// than moving through the editor's content.
+		const lamp = await markerPosition( marker( 'Hotspot 1: Lamp' ) );
+		await marker( 'Hotspot 1: Lamp' ).focus();
+		for ( const key of [ 'ArrowRight', 'Shift+ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight' ] ) {
+			await page.keyboard.press( key );
+			await expect( marker( 'Hotspot 1: Lamp' ), `focus after ${ key }` ).toBeFocused();
+		}
+		await expect.poll( () => markerPosition( marker( 'Hotspot 1: Lamp' ) ) ).toEqual( { left: lamp.left + 0.5, top: lamp.top + 4.5 } );
+		await expectBlockKept();
+
+		// Dragging moves a marker, without dragging the block.
+		const chair = await markerPosition( marker( 'Hotspot 2: Chair' ) );
+		const imageBox = ( await image.boundingBox() )!;
+		const chairBox = ( await marker( 'Hotspot 2: Chair' ).boundingBox() )!;
+		await page.mouse.move( chairBox.x + chairBox.width / 2, chairBox.y + chairBox.height / 2 );
+		await page.mouse.down();
+		await page.mouse.move( chairBox.x + chairBox.width / 2 - imageBox.width * 0.1, chairBox.y + chairBox.height / 2 + imageBox.height * 0.3, { steps: 5 } );
+		await page.mouse.up();
+		const dragged = await markerPosition( marker( 'Hotspot 2: Chair' ) );
+		expect( dragged.left ).toBeCloseTo( chair.left - 10, 0 );
+		expect( dragged.top ).toBeCloseTo( chair.top + 30, 0 );
+		await expect( rows ).toHaveCount( 2 );
+		await expectBlockKept();
+
+		// Up/Down reorder the Hotspots, Remove removes one; the focus stays
+		// in the field.
+		const focusInField = () => field.evaluate( ( node ) => node.contains( node.ownerDocument.activeElement ) );
+		await rows.nth( 1 ).getByRole( 'button', { name: 'Move Hotspot 2: Chair up' } ).click();
+		await expect( rows.nth( 0 ).getByLabel( 'Label' ) ).toHaveValue( 'Chair' );
+		expect( await focusInField(), 'focus after Up' ).toBe( true );
+		await rows.nth( 0 ).getByRole( 'button', { name: 'Move Hotspot 1: Chair down' } ).click();
+		await expect( rows.nth( 0 ).getByLabel( 'Label' ) ).toHaveValue( 'Lamp' );
+		expect( await focusInField(), 'focus after Down' ).toBe( true );
+		await rows.nth( 0 ).getByRole( 'button', { name: 'Remove Hotspot 1: Lamp' } ).click();
+		await expect( rows ).toHaveCount( 1 );
+		await expect( rows.nth( 0 ).getByLabel( 'Label' ) ).toHaveValue( 'Chair' );
+		expect( await focusInField(), 'focus after Remove' ).toBe( true );
+		await expectBlockKept();
+
+		// Saved, visitors see the block's image with its Hotspot.
+		await saveBlocks( page );
+		await page.goto( `/?p=${ postId }` );
+		const rendered = page.locator( '.hotspot-test-block' );
+		await expect( rendered.getByRole( 'img', { name: 'block image' } ) ).toBeVisible();
+		await expectRendered( rendered, [ { name: 'Chair', left: dragged.left, top: dragged.top } ] );
+	} );
 
 	test( 'ACF block version 3: the expanded editor places and moves Hotspots, and the preview follows', async ( { page } ) => {
 		const postId = createPost( [ { name: 'acf/hotspot-test-v3', image: images.block, hotspots: [ { x: 20, y: 30, label: 'Lamp' } ] } ] );

@@ -38,6 +38,7 @@ final class Plugin {
 		}
 
 		add_action( 'acf/include_field_types', array( self::class, 'register_field_type' ) );
+		Field_Resolver::register();
 		add_action( 'enqueue_block_assets', array( self::class, 'enqueue_block_editor_styles' ) );
 	}
 

@@ -25,6 +25,23 @@ defined( 'ABSPATH' ) || exit;
 final class Field_Resolver {
 
 	/**
+	 * ACF blocks whose templates are rendering, outermost first: each one's
+	 * ACF ID and how many `have_rows()` loops were open as it started.
+	 *
+	 * @var list<array{id: string, loops: int}>
+	 */
+	private static array $blocks = array();
+
+	/**
+	 * Follows ACF block templates as they render, so a Hotspot Field inside a
+	 * block tells loops opened by the block from loops open around it.
+	 */
+	public static function register(): void {
+		add_action( 'acf/blocks/pre_block_template_render', array( self::class, 'start_block' ) );
+		add_action( 'acf/blocks/post_block_template_render', array( self::class, 'end_block' ) );
+	}
+
+	/**
 	 * Finds a Hotspot Field and its Linked Image Field's image.
 	 *
 	 * A Hotspot Field of the current `have_rows()` row (or of a row enclosing
@@ -136,8 +153,10 @@ final class Field_Resolver {
 	/**
 	 * The rows of the `have_rows()` loops that are open, innermost first: the
 	 * current row, then each row that encloses it. Loops of another post than
-	 * the requested one are left out; without a requested post, inside an ACF
-	 * block, so are loops of anything but that block.
+	 * the requested one are left out. Without a requested post, inside an ACF
+	 * block, so are the loops that were already open when the block started
+	 * rendering: the block's fields belong to the block, while loops its own
+	 * template opens, on the block or anywhere else, count as usual.
 	 *
 	 * @param int|null $post_id Requested post ID; null for the current one.
 	 * @return list<array{field: array, row: array, post_id: int|string, prefix: string}>
@@ -147,7 +166,10 @@ final class Field_Resolver {
 			return array();
 		}
 
-		$wanted = null === $post_id ? self::current_block_id() : acf_get_valid_post_id( $post_id );
+		$wanted = null === $post_id ? null : acf_get_valid_post_id( $post_id );
+		$block  = null === $post_id ? self::current_block_id() : null;
+		$count  = self::open_loop_count();
+		$first  = null === $block ? 0 : self::loops_open_before( $block );
 		$levels = array();
 		$inner  = null;
 
@@ -165,6 +187,11 @@ final class Field_Resolver {
 				break;
 			}
 
+			// A loop open around the block, unless it is the block's own.
+			if ( null !== $block && $count + $i < $first && $loop['post_id'] !== $block ) {
+				break;
+			}
+
 			$levels[] = array(
 				'field'   => $loop['field'],
 				'row'     => $row,
@@ -178,10 +205,54 @@ final class Field_Resolver {
 	}
 
 	/**
+	 * Remembers how many `have_rows()` loops are open as an ACF block's
+	 * template starts rendering. A stack, as blocks nest (InnerBlocks).
+	 *
+	 * @param array $block The block being rendered.
+	 */
+	public static function start_block( $block ): void {
+		self::$blocks[] = array(
+			'id'    => is_array( $block ) ? (string) ( $block['id'] ?? '' ) : '',
+			'loops' => self::open_loop_count(),
+		);
+	}
+
+	/**
+	 * Forgets the block whose template has rendered.
+	 */
+	public static function end_block(): void {
+		array_pop( self::$blocks );
+	}
+
+	/**
+	 * How many `have_rows()` loops were open as a block started rendering.
+	 * ACF announces the rendering of block templates only; for a block that
+	 * renders through a callback, every loop counts as opened before it.
+	 *
+	 * @param string $block_id The block's ACF ID.
+	 */
+	private static function loops_open_before( string $block_id ): int {
+		$started = end( self::$blocks );
+
+		return false !== $started && $block_id === $started['id'] ? $started['loops'] : PHP_INT_MAX;
+	}
+
+	/**
+	 * How many `have_rows()` loops are open.
+	 */
+	private static function open_loop_count(): int {
+		$count = 0;
+
+		while ( false !== acf_get_loop( $count ) ) {
+			++$count;
+		}
+
+		return $count;
+	}
+
+	/**
 	 * The ACF ID of the block being rendered, whose fields get_field() reads
-	 * when given no post ID. A Hotspot Field rendered inside an ACF block
-	 * belongs to that block, even when a `have_rows()` loop on a post is open
-	 * around the block.
+	 * when given no post ID.
 	 *
 	 * @return string|null Block ID, or null outside ACF blocks.
 	 */

@@ -15,11 +15,18 @@
  * - open_foreign_rows_loop() and render_foreign_rows(): a have_rows() loop
  *   on another post or on `option` than the current post;
  * - block_markup(), create_post_with_blocks(), render_blocks(),
- *   render_block_preview() and in_block_editor(): the ACF test blocks of
- *   `tests/fixtures/hotspot-test-blocks` on a page, and in the block
- *   editor and its previews.
+ *   render_block_preview(), validate_block() and in_block_editor(): the ACF
+ *   test blocks of `tests/fixtures/hotspot-test-blocks` on a page, and in
+ *   the block editor, its previews and its validation.
  */
 abstract class Hotspot_Field_Test_Case extends WP_UnitTestCase {
+
+	/**
+	 * The ACF test block that stores its values in the post's meta
+	 * (`usePostMeta`) rather than in the block; otherwise like the blocks of
+	 * block_names().
+	 */
+	public const META_BLOCK = 'acf/hotspot-test-meta';
 
 	/**
 	 * Current user before go_to_preview() logged an editor in; null when no
@@ -188,6 +195,28 @@ abstract class Hotspot_Field_Test_Case extends WP_UnitTestCase {
 		$this->assertCount( 1, $blocks, 'One block to preview.' );
 
 		return $this->in_block_editor( static fn () => acf_rendered_block( $blocks[0]['attrs'], '', true, $post_id ) );
+	}
+
+	/**
+	 * Validates a block's values as the block editor has ACF validate them
+	 * when it fetches the block: from the block's data, under the block's
+	 * input names.
+	 *
+	 * @param string $content Serialized block.
+	 * @return list<string> Error messages; empty when the values are valid.
+	 */
+	protected function validate_block( string $content ): array {
+		$blocks = parse_blocks( $content );
+
+		$this->assertCount( 1, $blocks, 'One block to validate.' );
+
+		// Without an ID of its own, the block is named after its client ID.
+		$block = acf_prepare_block( $blocks[0]['attrs'] + array( 'id' => wp_generate_uuid4() ) );
+		$this->assertIsArray( $block, 'The block is an ACF block.' );
+
+		$state = $this->in_block_editor( static fn () => acf_get_block_validation_state( $block, false, true ) );
+
+		return array_values( array_column( (array) $state['errors'], 'message' ) );
 	}
 
 	/**

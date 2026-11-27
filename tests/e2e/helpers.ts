@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { expect, test as base, type Frame, type FrameLocator, type Locator, type Page, type Request } from '@playwright/test';
+import { expect, test as base, type Frame, type Locator, type Page, type Request } from '@playwright/test';
 
 export { expect };
 
@@ -242,10 +242,12 @@ export type TestBlock = ( typeof TEST_BLOCKS )[ number ][ 'name' ];
  * saves them.
  *
  * @param title  Post title.
- * @param blocks Blocks, in order: test block name, image and Hotspots.
+ * @param blocks Blocks, in order: test block name, image, Hotspots and the
+ *               mode the editor shows the block in (`preview` unless given;
+ *               `edit` shows the block's fields inside the block).
  * @return Post ID.
  */
-export function createPostWithBlocks( title: string, blocks: Array< { name: TestBlock; image: number | null; hotspots: Array< Partial< Hotspot > > } > ): number {
+export function createPostWithBlocks( title: string, blocks: Array< { name: TestBlock; image: number | null; hotspots: Array< Partial< Hotspot > >; mode?: 'preview' | 'edit' } > ): number {
 	const payload = Buffer.from( JSON.stringify( { title, blocks } ) ).toString( 'base64' );
 
 	return wpEval< number >( `
@@ -262,7 +264,7 @@ export function createPostWithBlocks( title: string, blocks: Array< { name: Test
 						"{$prefix}_photo"    => null === $block['image'] ? '' : (string) $block['image'],
 						"{$prefix}_hotspots" => wp_json_encode( $hotspots ),
 					),
-					'mode' => 'preview',
+					'mode' => $block['mode'] ?? 'preview',
 				),
 				'innerBlocks'  => array(),
 				'innerHTML'    => '',
@@ -287,16 +289,53 @@ export function createPostWithBlocks( title: string, blocks: Array< { name: Test
  */
 export async function openBlockEditor( page: Page, postId: number ): Promise< void > {
 	await loadEditor( page, postId );
+
+	const iframe = page.locator( 'iframe[name="editor-canvas"]' );
+	await expect( iframe.or( page.locator( '.editor-styles-wrapper' ) ).first() ).toBeAttached();
+	canvases.set( page, ( await iframe.count() ) > 0 ? page.frameLocator( 'iframe[name="editor-canvas"]' ).locator( 'body' ) : page.locator( '.editor-styles-wrapper' ) );
+
 	await expect( editorCanvas( page ).locator( '[data-type^="acf/"]' ).first() ).toBeVisible();
 }
 
 /**
- * The block editor's content, where blocks and their previews show.
+ * The block editor's content of each page, found by openBlockEditor().
+ */
+const canvases = new WeakMap< Page, Locator >();
+
+/**
+ * The block editor's content, where blocks and their previews show. The
+ * editor shows it in an iframe, except on WordPress before 7.1 when a block
+ * of API version 2 or lower is registered (as the version 2 test block is):
+ * there the content is part of the page. Needs openBlockEditor() first.
  *
  * @param page Playwright page.
  */
-export function editorCanvas( page: Page ): FrameLocator {
-	return page.frameLocator( 'iframe[name="editor-canvas"]' );
+export function editorCanvas( page: Page ): Locator {
+	const canvas = canvases.get( page );
+	if ( ! canvas ) {
+		throw new Error( 'Open the block editor with openBlockEditor() first.' );
+	}
+	return canvas;
+}
+
+/**
+ * Whether the block editor shows its content in an iframe (see
+ * editorCanvas()). Needs openBlockEditor() first.
+ *
+ * @param page Playwright page.
+ */
+export function isEditorIframed( page: Page ): boolean {
+	return page.frame( { name: 'editor-canvas' } ) !== null;
+}
+
+/**
+ * The frame of the block editor's content: its iframe, or the page when the
+ * editor is not iframed (see editorCanvas()).
+ *
+ * @param page Playwright page.
+ */
+export function editorCanvasFrame( page: Page ): Frame {
+	return page.frame( { name: 'editor-canvas' } ) ?? page.mainFrame();
 }
 
 /**
@@ -307,6 +346,28 @@ export function editorCanvas( page: Page ): FrameLocator {
  */
 export function blockPreview( page: Page, index: number ): Locator {
 	return editorCanvas( page ).locator( '[data-type^="acf/"]' ).nth( index );
+}
+
+/**
+ * The Hotspot Field shown inside an ACF block in the block editor's content,
+ * as ACF shows a block's fields in Edit mode.
+ *
+ * @param page  Playwright page.
+ * @param index Position of the block in the post, from 0.
+ */
+export async function blockEditForm( page: Page, index: number ): Promise< Locator > {
+	const field = blockPreview( page, index ).locator( '.acf-field-hotspot' );
+	await expect( field ).toHaveCount( 1 );
+	return field;
+}
+
+/**
+ * The client ID of the block selected in the block editor; null when none is.
+ *
+ * @param page Playwright page.
+ */
+export function selectedBlockId( page: Page ): Promise< string | null > {
+	return page.evaluate( () => ( window as any ).wp.data.select( 'core/block-editor' ).getSelectedBlockClientId() );
 }
 
 /**
