@@ -1,5 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { wp, wpEval } from './wp-cli';
+import { type Locator, type Page } from '@playwright/test';
+import { expect, test, wp, wpEval } from './helpers';
 
 type Hotspot = { x: number; y: number; label: string; description: string };
 

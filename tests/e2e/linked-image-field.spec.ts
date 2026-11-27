@@ -1,5 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { clickAt, loadedImage, openEditor, save, wp, wpEval, type Hotspot } from './helpers';
+import { type Locator, type Page } from '@playwright/test';
+import { expect, test, clickAt, loadedImage, openEditor, save, wp, wpEval, type Hotspot } from './helpers';
 
 const suffix = Date.now();
 const key = ( name: string ): string => `field_e2e_linked_${ name }_${ suffix }`;

@@ -354,15 +354,15 @@ class HotspotFieldRenderTest extends Hotspot_Field_Test_Case {
 	}
 
 	/**
-	 * In a preview the current post is the latest revision; its parent's
-	 * Hotspots still render.
+	 * In a preview of a draft the current post stays the draft while ACF
+	 * reads its latest revision; the draft's Hotspots render, with or
+	 * without its post ID.
 	 */
-	public function test_shortcode_renders_the_parent_of_the_previewed_revision(): void {
-		$post_id     = $this->create_post_with_hotspots( self::HOTSPOTS, array( 'post_status' => 'draft' ) );
-		$revision_id = _wp_put_post_revision( get_post( $post_id ), true );
-		$this->assertIsInt( $revision_id );
-		$GLOBALS['post'] = get_post( $revision_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Simulates a preview.
+	public function test_shortcode_renders_the_previewed_draft(): void {
+		$post_id = $this->create_post_with_hotspots( self::HOTSPOTS, array( 'post_status' => 'draft' ) );
+		$this->go_to_preview( $post_id );
 
+		$this->assertCount( 3, $this->buttons( do_shortcode( '[hotspot_field name="hotspots"]' ) ) );
 		$this->assertCount( 3, $this->buttons( do_shortcode( sprintf( '[hotspot_field name="hotspots" post_id="%d"]', $post_id ) ) ) );
 	}
 

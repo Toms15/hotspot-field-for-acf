@@ -1,5 +1,4 @@
-import { execFileSync } from 'node:child_process';
-import { expect, test } from '@playwright/test';
+import { expect, test, wp } from './helpers';
 
 /**
  * Deletes a field group and its fields through ACF, using WP-CLI in wp-env.
@@ -7,9 +6,7 @@ import { expect, test } from '@playwright/test';
  * @param id Field group post ID.
  */
 function deleteFieldGroup( id: number ): void {
-	execFileSync( 'npx', [ 'wp-env', 'run', 'cli', 'wp', 'eval', `acf_delete_field_group( ${ id } );` ], {
-		stdio: 'ignore',
-	} );
+	wp( 'eval', `acf_delete_field_group( ${ id } );` );
 }
 
 test.describe( 'Hotspot Field in a field group', () => {

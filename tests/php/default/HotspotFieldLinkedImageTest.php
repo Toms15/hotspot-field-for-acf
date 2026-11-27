@@ -205,17 +205,6 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 	}
 
 	/**
-	 * Closes the have_rows() loops a test left open.
-	 */
-	public function tear_down(): void {
-		while ( acf_get_loop( 'active' ) ) {
-			acf_remove_loop( 'active' );
-		}
-
-		parent::tear_down();
-	}
-
-	/**
 	 * A top-level Hotspot Field rendered inside a row still uses the
 	 * top-level image, not the row's.
 	 */
@@ -245,12 +234,10 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 		);
 		$this->go_to_post( $post_id );
 
-		$html = array();
-		while ( have_rows( 'rooms', 'option' ) ) {
-			the_row();
-			$html[] = hotspot_field_render( 'house_hotspots' );
-			$html[] = do_shortcode( '[hotspot_field name="house_hotspots"]' );
-		}
+		$html = array_merge(
+			$this->render_foreign_rows( 'rooms', 'option', static fn () => hotspot_field_render( 'house_hotspots' ) ),
+			$this->render_foreign_rows( 'rooms', 'option', static fn () => do_shortcode( '[hotspot_field name="house_hotspots"]' ) )
+		);
 
 		$this->assertCount( 2, $html );
 		foreach ( $html as $markup ) {
@@ -267,9 +254,7 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 		$other   = $this->create_post();
 		update_field( 'field_linked_cover', $this->bedroom_id, $other );
 		$this->go_to_post( $post_id );
-
-		$this->assertTrue( have_rows( 'rooms', $other ) );
-		the_row();
+		$this->open_foreign_rows_loop( 'rooms', $other );
 
 		$this->assertRendersImage( $this->cover_id, hotspot_field_render( 'house_hotspots' ) );
 		$this->assertRendersImage( $this->cover_id, do_shortcode( '[hotspot_field name="house_hotspots"]' ) );
@@ -292,7 +277,7 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 		update_field( 'field_linked_cover', $this->bedroom_id, $private );
 		$this->go_to_post( $post_id );
 
-		$html = $this->render_rows_raw( 'rooms', $private, static fn () => do_shortcode( '[hotspot_field name="house_hotspots"]' ) );
+		$html = $this->render_foreign_rows( 'rooms', $private, static fn () => do_shortcode( '[hotspot_field name="house_hotspots"]' ) );
 
 		$this->assertCount( 2, $html );
 		foreach ( $html as $markup ) {
@@ -315,13 +300,13 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 		wp_update_post( array( 'ID' => $hidden ) + $post_data );
 		$this->go_to_post( $post_id );
 
-		$this->assertSame( array( '', '' ), $this->render_rows_raw( 'rooms', $hidden, static fn () => do_shortcode( '[hotspot_field name="room_hotspots"]' ) ) );
+		$this->assertSame( array( '', '' ), $this->render_foreign_rows( 'rooms', $hidden, static fn () => do_shortcode( '[hotspot_field name="room_hotspots"]' ) ) );
 		$this->assertSame(
 			array(
 				array( $this->kitchen_id, 1 ),
 				array( $this->bedroom_id, 2 ),
 			),
-			$this->render_rows( 'rooms', $hidden, static fn () => hotspot_field_render( 'room_hotspots' ) )
+			$this->summarize( $this->render_foreign_rows( 'rooms', $hidden, static fn () => hotspot_field_render( 'room_hotspots' ) ) )
 		);
 	}
 
@@ -351,7 +336,7 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 				array( $this->kitchen_id, 1 ),
 				array( $this->bedroom_id, 2 ),
 			),
-			$this->render_rows( 'rooms', $other, static fn () => do_shortcode( '[hotspot_field name="room_hotspots"]' ) )
+			$this->summarize( $this->render_foreign_rows( 'rooms', $other, static fn () => do_shortcode( '[hotspot_field name="room_hotspots"]' ) ) )
 		);
 	}
 
@@ -366,7 +351,6 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 	 * @param string $status Status of the previewed post.
 	 */
 	public function test_shortcode_renders_the_revision_in_a_preview( string $status ): void {
-		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
 		$post_id = $this->create_post();
 		wp_update_post(
 			array(
@@ -376,26 +360,12 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 		);
 
 		// The unsaved changes being previewed: another cover image.
-		$revision_id = _wp_put_post_revision( get_post( $post_id ), true );
-		$this->assertIsInt( $revision_id );
-		acf_copy_postmeta( $post_id, $revision_id );
-		update_metadata( 'post', $revision_id, 'cover', (string) $this->bedroom_id );
-
-		$this->go_to(
-			add_query_arg(
-				array(
-					'p'          => $post_id,
-					'preview'    => 'true',
-					'preview_id' => $post_id,
-				),
-				home_url( '/' )
-			)
+		$this->go_to_preview(
+			$post_id,
+			function ( int $revision_id ): void {
+				update_metadata( 'post', $revision_id, 'cover', (string) $this->bedroom_id );
+			}
 		);
-		$this->assertTrue( is_preview() );
-		$this->assertTrue( have_posts() );
-		the_post();
-		$this->assertSame( $post_id, get_the_ID() );
-		$this->assertSame( $revision_id, acf_get_valid_post_id( $post_id ), 'ACF reads the preview from the revision.' );
 
 		$this->assertRendersImage( $this->bedroom_id, do_shortcode( '[hotspot_field name="house_hotspots"]' ) );
 		$this->assertRendersImage( $this->bedroom_id, do_shortcode( sprintf( '[hotspot_field name="house_hotspots" post_id="%d"]', $post_id ) ) );
@@ -667,9 +637,19 @@ class HotspotFieldLinkedImageTest extends Hotspot_Field_Test_Case {
 	 * @return list<array{int, int}> Attachment ID and number of Hotspots per row.
 	 */
 	private function render_rows( string $selector, $post_id, callable $render ): array {
+		return $this->summarize( $this->render_rows_raw( $selector, $post_id, $render ) );
+	}
+
+	/**
+	 * Reads back the image and the number of Hotspots of each render.
+	 *
+	 * @param string[] $html Markup per row.
+	 * @return list<array{int, int}> Attachment ID and number of Hotspots per row.
+	 */
+	private function summarize( array $html ): array {
 		return array_map(
-			fn ( string $html ): array => array( $this->rendered_image_id( $html ), substr_count( $html, '<button' ) ),
-			$this->render_rows_raw( $selector, $post_id, $render )
+			fn ( string $markup ): array => array( $this->rendered_image_id( $markup ), substr_count( $markup, '<button' ) ),
+			$html
 		);
 	}
 

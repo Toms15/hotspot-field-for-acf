@@ -1,6 +1,96 @@
-import { expect, type Locator, type Page, type Request } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+import { expect, test as base, type Locator, type Page, type Request } from '@playwright/test';
 
-export { wp, wpEval } from './wp-cli';
+export { expect };
+
+/**
+ * Playwright's `test`, checking every frontend page a test ends on: no
+ * duplicate `id`s, and every `popovertarget` / `aria-controls` names an
+ * element on the page. Specs import `test` from here so the check runs
+ * after each of them.
+ */
+export const test = base.extend( {
+	page: async ( { page, baseURL }, use ) => {
+		await use( page );
+
+		if ( isFrontendPage( page, baseURL ) ) {
+			await expectUniqueIds( page );
+		}
+	},
+} );
+
+/**
+ * Whether a page shows the site's frontend, not the admin or the login.
+ *
+ * @param page    Playwright page.
+ * @param baseURL Site URL.
+ */
+function isFrontendPage( page: Page, baseURL: string | undefined ): boolean {
+	if ( page.isClosed() || ! baseURL ) {
+		return false;
+	}
+	const url = new URL( page.url() );
+	return url.origin === new URL( baseURL ).origin && ! /^\/(wp-admin\/|wp-login\.php)/.test( url.pathname );
+}
+
+/**
+ * Asserts that a page has no duplicate `id`s and that every `popovertarget`
+ * and `aria-controls` points at an element of the page.
+ *
+ * @param page Playwright page.
+ */
+export async function expectUniqueIds( page: Page ): Promise< void > {
+	const problems = await page.evaluate( () => {
+		const found: string[] = [];
+		const counts = new Map< string, number >();
+		for ( const element of document.querySelectorAll( '[id]' ) ) {
+			counts.set( element.id, ( counts.get( element.id ) ?? 0 ) + 1 );
+		}
+		for ( const [ id, count ] of counts ) {
+			if ( count > 1 ) {
+				found.push( `id "${ id }" is used ${ count } times` );
+			}
+		}
+		for ( const attribute of [ 'popovertarget', 'aria-controls' ] ) {
+			for ( const element of document.querySelectorAll( `[${ attribute }]` ) ) {
+				for ( const id of ( element.getAttribute( attribute ) ?? '' ).split( /\s+/ ).filter( Boolean ) ) {
+					if ( ! document.getElementById( id ) ) {
+						found.push( `${ attribute }="${ id }" points at no element` );
+					}
+				}
+			}
+		}
+		return found;
+	} );
+
+	expect( problems, `duplicate ids or dangling references on ${ page.url() }` ).toEqual( [] );
+}
+
+/**
+ * Runs WP-CLI in wp-env and returns what the command printed.
+ *
+ * @param args WP-CLI arguments.
+ */
+export function wp( ...args: string[] ): string {
+	return execFileSync( 'npx', [ 'wp-env', 'run', 'cli', 'wp', ...args ], {
+		encoding: 'utf8',
+		stdio: [ 'ignore', 'pipe', 'ignore' ],
+	} ).trim();
+}
+
+/**
+ * Runs PHP in WordPress and returns the JSON it printed between markers.
+ *
+ * @param php PHP code that assigns the result to `$result`.
+ */
+export function wpEval< T >( php: string ): T {
+	const output = wp( 'eval', `${ php } echo '<<<', wp_json_encode( $result ), '>>>';` );
+	const match = output.match( /<<<([\s\S]*)>>>/ );
+	if ( ! match ) {
+		throw new Error( `WP-CLI printed no result: ${ output }` );
+	}
+	return JSON.parse( match[ 1 ] ) as T;
+}
 
 export type Hotspot = { x: number; y: number; label: string; description: string };
 

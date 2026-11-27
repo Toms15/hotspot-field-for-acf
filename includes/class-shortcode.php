@@ -106,7 +106,10 @@ final class Shortcode {
 			return true;
 		}
 
-		// In previews the current post is the latest revision of the target.
+		// The current post's own Hotspots show even before it is published. In
+		// a preview the current post stays the previewed post (ACF maps its ID
+		// to the latest revision when reading fields); a current post that is
+		// itself a revision counts as its parent.
 		$is_current = $current_id && in_array( $post_id, array( $current_id, (int) wp_is_post_revision( $current_id ) ), true );
 
 		return $is_current || is_post_publicly_viewable( $post_id );

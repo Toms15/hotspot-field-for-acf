@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { clickAt, loadedImage, openEditor, save, saveBlocked, wp, wpEval, type Hotspot } from './helpers';
+import { expect, test, clickAt, loadedImage, openEditor, save, saveBlocked, wp, wpEval, type Hotspot } from './helpers';
 
 const suffix = Date.now();
 const rowError = 'This Hotspot needs a Label.';
