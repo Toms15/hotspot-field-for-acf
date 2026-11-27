@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './helpers';
 
 const acfRow = ( page: Page ) => page.locator( 'tr[data-slug="advanced-custom-fields-pro"]' );
 

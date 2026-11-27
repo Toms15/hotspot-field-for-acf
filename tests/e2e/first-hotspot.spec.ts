@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { clickAt, loadedImage, openEditor, save, wp, wpEval, type Hotspot } from './helpers';
+import { expect, test, clickAt, loadedImage, openEditor, save, wp, wpEval, type Hotspot } from './helpers';
 
 const suffix = Date.now();
 const fieldGroupKey = `group_e2e_first_hotspot_${ suffix }`;

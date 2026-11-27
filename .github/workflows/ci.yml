@@ -13,7 +13,9 @@ permissions:
   contents: read
 
 # Third-party actions are pinned to commit SHAs (tag in the trailing comment).
-# The ACF Pro licence is passed only to the steps that download ACF Pro.
+# The ACF Pro licence is passed only to the steps that download ACF Pro (and
+# to the job that checks it is available); the scripts never print it.
+# Composer gets the workflow token only in the step that installs packages.
 
 jobs:
   phpcs:
@@ -28,7 +30,18 @@ jobs:
           php-version: '8.3'
           tools: composer
           coverage: none
+      - name: Locate the Composer cache
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
       - run: composer install --no-interaction --no-progress
+        env:
+          # Authenticated GitHub downloads avoid anonymous rate limits (HTTP 429).
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
       - run: composer lint
 
   acf-pro:
@@ -73,9 +86,29 @@ jobs:
           php-version: '8.3'
           tools: composer
           coverage: none
+      - name: Locate the Composer cache
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
       - run: composer install --no-interaction --no-progress
+        env:
+          # Authenticated GitHub downloads avoid anonymous rate limits (HTTP 429).
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
       - run: npm ci
-      - run: npm run env:start
+      - name: Start wp-env, retrying once on a failure
+        # Downloads (WordPress, plugins) sometimes fail transiently, e.g. HTTP
+        # 408 while cloning WordPress. A failed clone leaves nothing behind,
+        # so the retry starts clean; ACF Pro, once installed, is kept.
+        run: |
+          if ! npm run env:start; then
+            echo "::warning title=wp-env retry::Starting wp-env failed; retrying once."
+            sleep 15
+            npm run env:start
+          fi
         env:
           ACF_PRO_LICENSE: ${{ secrets.ACF_PRO_LICENSE }}
       - name: Check the PHP version PHPUnit runs on
@@ -101,10 +134,30 @@ jobs:
           php-version: '8.3'
           tools: composer
           coverage: none
+      - name: Locate the Composer cache
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
       - run: composer install --no-interaction --no-progress
+        env:
+          # Authenticated GitHub downloads avoid anonymous rate limits (HTTP 429).
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run env:start
+      - name: Start wp-env, retrying once on a failure
+        # Downloads (WordPress, plugins) sometimes fail transiently, e.g. HTTP
+        # 408 while cloning WordPress. A failed clone leaves nothing behind,
+        # so the retry starts clean; ACF Pro, once installed, is kept.
+        run: |
+          if ! npm run env:start; then
+            echo "::warning title=wp-env retry::Starting wp-env failed; retrying once."
+            sleep 15
+            npm run env:start
+          fi
         env:
           ACF_PRO_LICENSE: ${{ secrets.ACF_PRO_LICENSE }}
       - name: Check the PHP version WordPress runs on

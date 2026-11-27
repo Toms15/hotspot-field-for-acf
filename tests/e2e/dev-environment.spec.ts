@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './helpers';
 
 /**
  * wp-env mounts the whole repository as the plugin directory, so the dev-only

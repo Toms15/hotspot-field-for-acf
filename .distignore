@@ -23,6 +23,7 @@
 .wp-env.json
 .wp-env.override.json
 CLAUDE.md
+CODING_STANDARDS.md
 GLOSSARY.md
 README.md
 composer.json

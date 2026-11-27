@@ -1,5 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { loadedImage, openEditor, save, wp, wpEval, type Hotspot } from './helpers';
+import { type Locator, type Page } from '@playwright/test';
+import { expect, test, loadedImage, openEditor, save, wp, wpEval, type Hotspot } from './helpers';
 
 const suffix = Date.now();
 const fieldGroupKey = `group_e2e_editor_management_${ suffix }`;
