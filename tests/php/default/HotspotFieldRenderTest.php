@@ -367,6 +367,19 @@ class HotspotFieldRenderTest extends Hotspot_Field_Test_Case {
 	}
 
 	/**
+	 * When the current post is itself a revision, the shortcode treats it as
+	 * its parent: the parent's Hotspots render even before it is published.
+	 */
+	public function test_shortcode_treats_a_current_revision_as_its_parent(): void {
+		$post_id     = $this->create_post_with_hotspots( self::HOTSPOTS, array( 'post_status' => 'draft' ) );
+		$revision_id = _wp_put_post_revision( get_post( $post_id ), true );
+		$this->assertIsInt( $revision_id );
+		$GLOBALS['post'] = get_post( $revision_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Simulates a current post that is a revision.
+
+		$this->assertCount( 3, $this->buttons( do_shortcode( sprintf( '[hotspot_field name="hotspots" post_id="%d"]', $post_id ) ) ) );
+	}
+
+	/**
 	 * Until its password is entered, a password-protected post's own
 	 * Hotspots stay hidden too.
 	 */

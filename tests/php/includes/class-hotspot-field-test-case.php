@@ -130,7 +130,9 @@ abstract class Hotspot_Field_Test_Case extends WP_UnitTestCase {
 	 * @return int Revision ID ACF reads the fields from.
 	 */
 	protected function go_to_preview( int $post_id, ?callable $edit_revision = null ): int {
-		$this->user_before_preview = get_current_user_id();
+		if ( null === $this->user_before_preview ) {
+			$this->user_before_preview = get_current_user_id();
+		}
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
 
 		$revision_id = _wp_put_post_revision( get_post( $post_id ), true );

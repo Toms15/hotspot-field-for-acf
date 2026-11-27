@@ -86,6 +86,20 @@ class RenderContextHelpersTest extends Hotspot_Field_Test_Case {
 	}
 
 	/**
+	 * Two previews in one test still restore the user from before the first.
+	 */
+	public function test_second_preview_restores_the_original_user(): void {
+		$visitor_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $visitor_id );
+
+		$this->go_to_preview( self::factory()->post->create( array( 'post_status' => 'draft' ) ) );
+		$this->go_to_preview( self::factory()->post->create( array( 'post_status' => 'draft' ) ) );
+		$this->end_render_contexts();
+
+		$this->assertSame( $visitor_id, get_current_user_id() );
+	}
+
+	/**
 	 * A foreign loop left open reads another post than the current one; the
 	 * cleanup closes it.
 	 */
