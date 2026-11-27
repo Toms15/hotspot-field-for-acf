@@ -1,0 +1,13 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "acf/hotspot-test-v3",
+	"title": "Hotspot test block (ACF block version 3)",
+	"category": "media",
+	"icon": "location",
+	"acf": {
+		"blockVersion": 3,
+		"mode": "preview",
+		"renderTemplate": "../render.php"
+	}
+}

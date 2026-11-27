@@ -4,7 +4,8 @@
 	"phpVersion": "8.3",
 	"plugins": [
 		"./.wp-env-plugins/advanced-custom-fields-pro",
-		"https://downloads.wordpress.org/plugin/plugin-check.latest-stable.zip"
+		"https://downloads.wordpress.org/plugin/plugin-check.latest-stable.zip",
+		"./tests/fixtures/hotspot-test-blocks"
 	],
 	"mappings": {
 		"wp-content/plugins/hotspot-field-for-acf": "."

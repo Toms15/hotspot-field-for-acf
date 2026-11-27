@@ -29,7 +29,7 @@ npx playwright install chromium
 
 ### Environment
 
-The environment is [`wp-env`](https://developer.wordpress.org/block-editor/reference-guides/packages/packages-env/) (see `.wp-env.json`): WordPress, PHP 8.3, ACF Pro and Plugin Check, with this plugin mapped to `wp-content/plugins/hotspot-field-for-acf` and activated.
+The environment is [`wp-env`](https://developer.wordpress.org/block-editor/reference-guides/packages/packages-env/) (see `.wp-env.json`): WordPress, PHP 8.3, ACF Pro and Plugin Check, with this plugin mapped to `wp-content/plugins/hotspot-field-for-acf` and activated. It also activates the test-only plugin in `tests/fixtures/hotspot-test-blocks`, which registers two ACF blocks holding a Hotspot Field (one per ACF block version, 2 and 3) for the Playwright suite; PHPUnit loads the same blocks.
 
 | Command | What it does |
 | --- | --- |

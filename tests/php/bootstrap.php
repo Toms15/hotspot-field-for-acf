@@ -27,6 +27,8 @@ tests_add_filter(
 	static function (): void {
 		if ( ! getenv( 'HOTSPOT_FIELD_TESTS_WITHOUT_ACF' ) ) {
 			require_once WP_PLUGIN_DIR . '/advanced-custom-fields-pro/acf.php';
+			// ACF blocks holding a Hotspot Field, shared with the Playwright suite.
+			require_once dirname( __DIR__ ) . '/fixtures/hotspot-test-blocks/hotspot-test-blocks.php';
 		}
 
 		$acf_version = getenv( 'HOTSPOT_FIELD_TESTS_ACF_VERSION' );
@@ -39,5 +41,12 @@ tests_add_filter(
 );
 
 require $hotspot_field_tests_dir . '/includes/bootstrap.php';
+
+// ACF hooks its local meta (which lets get_field() read an ACF block's values
+// while the block renders) into WordPress when first used. Using it now puts
+// that hook among those the test suite restores after each test.
+if ( function_exists( 'acf_get_instance' ) ) {
+	acf_get_instance( 'ACF_Local_Meta' );
+}
 
 require_once __DIR__ . '/includes/class-hotspot-field-test-case.php';

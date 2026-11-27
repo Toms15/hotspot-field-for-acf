@@ -123,7 +123,8 @@ class Hotspot_Field extends \acf_field {
 	 * required Hotspot Field without Hotspots.
 	 *
 	 * Like every value ACF validates, it arrives slashed, as WordPress slashes
-	 * form data.
+	 * form data; except the values of an ACF block, which ACF validates as
+	 * stored in the block.
 	 *
 	 * @param bool|string $valid Whether the value is valid so far, or an error message.
 	 * @param mixed       $value Submitted value: a list, or its JSON encoding.
@@ -136,7 +137,7 @@ class Hotspot_Field extends \acf_field {
 			return $valid;
 		}
 
-		$hotspots = Hotspot_Value::normalize( wp_unslash( $value ) );
+		$hotspots = Hotspot_Value::normalize( self::is_block( $input ) ? $value : wp_unslash( $value ) );
 
 		if ( ! $hotspots ) {
 			if ( empty( $field['required'] ) ) {
@@ -184,13 +185,32 @@ class Hotspot_Field extends \acf_field {
 	 * (wp_slash( wp_json_encode( $hotspots ) )); a list needs no slashing
 	 * unless its text contains backslashes, as with ACF's own fields.
 	 *
+	 * The values of an ACF block are the exception: ACF hands them over as
+	 * stored in the block and keeps what this returns as it is, so they are
+	 * neither unslashed nor slashed.
+	 *
 	 * @param mixed      $value   Submitted value: a list, or its JSON encoding.
 	 * @param int|string $post_id Post ID.
 	 * @param array      $field   The field.
-	 * @return array The canonical list of Hotspots, slashed.
+	 * @return array The canonical list of Hotspots; slashed, except for a block.
 	 */
 	public function update_value( $value, $post_id, $field ): array {
+		if ( self::is_block( $post_id ) ) {
+			return Hotspot_Value::normalize( $value );
+		}
+
 		return wp_slash( Hotspot_Value::normalize( wp_unslash( $value ) ) );
+	}
+
+	/**
+	 * Whether ACF is saving or validating the values of an ACF block, which
+	 * it names after the block: a post ID such as `block_…`, an input name
+	 * such as `acf-block_…[field_…]`.
+	 *
+	 * @param mixed $id ACF post ID or input name.
+	 */
+	private static function is_block( $id ): bool {
+		return is_string( $id ) && ( str_starts_with( $id, 'block_' ) || str_starts_with( $id, 'acf-block_' ) );
 	}
 
 	/**

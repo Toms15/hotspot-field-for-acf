@@ -761,10 +761,16 @@
 		},
 
 		/**
-		 * Writes the list to the hidden input that ACF saves.
+		 * Writes the list to the hidden input that ACF saves, and tells the
+		 * form it changed. The change event is a native one: ACF blocks
+		 * (version 3) only hear events dispatched by the browser to update
+		 * the block and refresh its preview, while jQuery handlers, such as
+		 * those of version 2 blocks, hear native events too.
 		 */
 		save() {
-			this.$input().val( JSON.stringify( this.hotspots ) ).trigger( 'change' );
+			const input = this.$input().get( 0 );
+			input.value = JSON.stringify( this.hotspots );
+			input.dispatchEvent( new Event( 'change', { bubbles: true } ) );
 		},
 
 		/**

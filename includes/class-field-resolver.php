@@ -136,9 +136,10 @@ final class Field_Resolver {
 	/**
 	 * The rows of the `have_rows()` loops that are open, innermost first: the
 	 * current row, then each row that encloses it. Loops of another post than
-	 * the requested one are left out.
+	 * the requested one are left out; without a requested post, inside an ACF
+	 * block, so are loops of anything but that block.
 	 *
-	 * @param int|null $post_id Requested post ID; null for any.
+	 * @param int|null $post_id Requested post ID; null for the current one.
 	 * @return list<array{field: array, row: array, post_id: int|string, prefix: string}>
 	 */
 	private static function row_levels( ?int $post_id ): array {
@@ -146,7 +147,7 @@ final class Field_Resolver {
 			return array();
 		}
 
-		$wanted = null === $post_id ? null : acf_get_valid_post_id( $post_id );
+		$wanted = null === $post_id ? self::current_block_id() : acf_get_valid_post_id( $post_id );
 		$levels = array();
 		$inner  = null;
 
@@ -174,6 +175,20 @@ final class Field_Resolver {
 		}
 
 		return $levels;
+	}
+
+	/**
+	 * The ACF ID of the block being rendered, whose fields get_field() reads
+	 * when given no post ID. A Hotspot Field rendered inside an ACF block
+	 * belongs to that block, even when a `have_rows()` loop on a post is open
+	 * around the block.
+	 *
+	 * @return string|null Block ID, or null outside ACF blocks.
+	 */
+	private static function current_block_id(): ?string {
+		$current = acf_get_valid_post_id( false );
+
+		return is_string( $current ) && str_starts_with( $current, 'block_' ) ? $current : null;
 	}
 
 	/**
