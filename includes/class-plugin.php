@@ -38,6 +38,21 @@ final class Plugin {
 		}
 
 		add_action( 'acf/include_field_types', array( self::class, 'register_field_type' ) );
+		Field_Resolver::register();
+		add_action( 'enqueue_block_assets', array( self::class, 'enqueue_block_editor_styles' ) );
+	}
+
+	/**
+	 * Loads the frontend stylesheet into the block editor's content, so ACF
+	 * block previews show Hotspot Fields as visitors see them. Block previews
+	 * are fetched after the editor has loaded, too late for the Renderer to
+	 * enqueue it. The frontend itself still loads it only where a Hotspot
+	 * Field is rendered.
+	 */
+	public static function enqueue_block_editor_styles(): void {
+		if ( is_admin() ) {
+			wp_enqueue_style( Renderer::STYLE_HANDLE );
+		}
 	}
 
 	/**
@@ -63,7 +78,8 @@ final class Plugin {
 	}
 
 	/**
-	 * Explains that ACF 6.0 or later is required.
+	 * Explains that ACF 6.6 or later is required (the first release that
+	 * announces block template renders).
 	 */
 	public static function render_requirement_notice(): void {
 		if ( ! current_user_can( 'activate_plugins' ) ) {

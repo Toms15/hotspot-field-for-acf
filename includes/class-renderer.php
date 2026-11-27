@@ -16,7 +16,8 @@ defined( 'ABSPATH' ) || exit;
  * those are unique per request, so a field rendered twice on a page (say a
  * shortcode in the content and hotspot_field_render() in the template) is
  * still valid HTML and each button opens its own Popover, with or without
- * JavaScript.
+ * JavaScript. The block editor shows ACF block previews rendered by
+ * separate requests side by side, so there the IDs also carry a random part.
  */
 final class Renderer {
 
@@ -76,7 +77,7 @@ final class Renderer {
 		}
 
 		$hotspots = Hotspot_Value::normalize( $hotspots );
-		$id_base  = wp_unique_id( 'hotspot-field-' );
+		$id_base  = wp_unique_id( self::id_prefix() );
 		$buttons  = '';
 
 		foreach ( $hotspots as $index => $hotspot ) {
@@ -115,6 +116,25 @@ final class Renderer {
 			esc_html( $name ),
 			$description
 		);
+	}
+
+	/**
+	 * Prefix of the Popover IDs. A request counter alone keeps them unique on
+	 * a page built by one request. In the admin and in REST and Ajax
+	 * requests, which is where the block editor gets ACF block previews from,
+	 * a request may build just one block's preview, and the editor shows
+	 * several side by side: there the prefix also carries a random part.
+	 */
+	private static function id_prefix(): string {
+		static $random = null;
+
+		if ( ! is_admin() && ! wp_doing_ajax() && ! wp_is_serving_rest_request() ) {
+			return 'hotspot-field-';
+		}
+
+		$random ??= substr( md5( wp_generate_uuid4() ), 0, 8 );
+
+		return "hotspot-field-{$random}-";
 	}
 
 	/**

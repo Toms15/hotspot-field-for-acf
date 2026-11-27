@@ -14,7 +14,7 @@ Every public entry point (shortcode, `hotspot_field_render()`, `hotspot_field_re
 ## Tests for render context
 
 - **Distinct objects in fixtures.** A context test builds the two sides as different objects: the loop's post differs from the current post, the global post is the revision's parent while ACF reads the revision, the private target differs from the public current post. A test where both sides coincide proves nothing about the context.
-- **Shared helpers.** Context setup goes through the helpers in `tests/php/includes/class-hotspot-field-test-case.php` (real preview, foreign rows loop) rather than ad-hoc `$_GET` / global juggling inside a single test.
+- **Shared helpers.** Context setup goes through the helpers in `tests/php/includes/class-hotspot-field-test-case.php` (real preview, foreign rows loop, ACF test blocks on a page and in the editor preview) and `tests/e2e/helpers.ts` (block editor, test blocks) rather than ad-hoc `$_GET` / global juggling inside a single test.
 - **External behaviour only.** Assert through the public PHP API and the browser (roles, accessible names, ARIA state), never internal classes or CSS-only state classes.
 
 ## Secrets and the dev environment

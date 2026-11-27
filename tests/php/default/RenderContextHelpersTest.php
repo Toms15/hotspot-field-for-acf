@@ -166,4 +166,42 @@ class RenderContextHelpersTest extends Hotspot_Field_Test_Case {
 		$this->expectException( \PHPUnit\Framework\ExpectationFailedException::class );
 		$this->open_foreign_rows_loop( 'items', $current_id );
 	}
+
+	/**
+	 * A test block saved with create_post_with_blocks() reaches the post's
+	 * content as the block editor's save leaves it: ACF has stored the
+	 * block's values by field name, the Hotspots as a list, text intact.
+	 *
+	 * @dataProvider block_names
+	 *
+	 * @param string $block_name Test block.
+	 */
+	public function test_saved_test_block_holds_its_values( string $block_name ): void {
+		$hotspots = array(
+			array(
+				'x'           => 12.5,
+				'y'           => 50,
+				'label'       => 'Say "hi"',
+				'description' => 'C:\\Rooms',
+			),
+		);
+
+		$post_id = $this->create_post_with_blocks( $this->block_markup( $block_name, 123, $hotspots ) );
+		$blocks  = parse_blocks( get_post( $post_id )->post_content );
+
+		$this->assertSame( $block_name, $blocks[0]['blockName'] );
+		$this->assertEquals( 123, $blocks[0]['attrs']['data']['photo'] );
+		$this->assertSame( $hotspots, $blocks[0]['attrs']['data']['hotspots'] );
+	}
+
+	/**
+	 * The in_block_editor() helper runs code in the admin, then restores the
+	 * screen.
+	 */
+	public function test_in_block_editor_runs_in_the_admin_and_restores_the_screen(): void {
+		$this->assertFalse( is_admin() );
+
+		$this->assertTrue( $this->in_block_editor( static fn () => is_admin() && 'post' === get_current_screen()->base ) );
+		$this->assertFalse( is_admin(), 'The screen is restored.' );
+	}
 }

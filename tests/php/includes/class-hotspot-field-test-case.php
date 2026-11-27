@@ -13,9 +13,20 @@
  * objects on each side, undone in tear_down():
  * - go_to_preview(): a real preview of a post;
  * - open_foreign_rows_loop() and render_foreign_rows(): a have_rows() loop
- *   on another post or on `option` than the current post.
+ *   on another post or on `option` than the current post;
+ * - block_markup(), create_post_with_blocks(), render_blocks(),
+ *   render_block_preview(), validate_block() and in_block_editor(): the ACF
+ *   test blocks of `tests/fixtures/hotspot-test-blocks` on a page, and in
+ *   the block editor, its previews and its validation.
  */
 abstract class Hotspot_Field_Test_Case extends WP_UnitTestCase {
+
+	/**
+	 * The ACF test block that stores its values in the post's meta
+	 * (`usePostMeta`) rather than in the block; otherwise like the blocks of
+	 * block_names().
+	 */
+	public const META_BLOCK = 'acf/hotspot-test-meta';
 
 	/**
 	 * Current user before go_to_preview() logged an editor in; null when no
@@ -88,6 +99,148 @@ abstract class Hotspot_Field_Test_Case extends WP_UnitTestCase {
 		}
 
 		return $attachment_id;
+	}
+
+	/**
+	 * The ACF test blocks: one per ACF block version, rendering through a
+	 * template, and two rendering through a callback, registered from
+	 * block.json and with acf_register_block_type(). Each holds an image
+	 * field `photo` and a Hotspot Field `hotspots` linked to it, and renders
+	 * it with hotspot_field_render() unless a test picks another entry point
+	 * (see render_blocks()).
+	 *
+	 * @return array<string, array{string}> Block name, by kind of block.
+	 */
+	public static function block_names(): array {
+		return array(
+			'ACF block version 2'                   => array( 'acf/hotspot-test-v2' ),
+			'ACF block version 3'                   => array( 'acf/hotspot-test-v3' ),
+			'ACF block.json block with a callback'  => array( 'acf/hotspot-test-callback' ),
+			'ACF block registered in PHP, callback' => array( 'acf/hotspot-test-php-callback' ),
+		);
+	}
+
+	/**
+	 * A test block as the block editor stores it in post content: its field
+	 * values keyed by field key, the Hotspots as the editor's JSON.
+	 *
+	 * @param string   $block_name Test block name.
+	 * @param int|null $image_id   Image of the block's `photo` field; null for none.
+	 * @param array    $hotspots   Hotspots of the block's `hotspots` field.
+	 * @return string Serialized block.
+	 */
+	protected function block_markup( string $block_name, ?int $image_id, array $hotspots ): string {
+		$key_prefix = 'field_' . str_replace( array( 'acf/', '-' ), array( '', '_' ), $block_name );
+
+		return serialize_block(
+			array(
+				'blockName'    => $block_name,
+				'attrs'        => array(
+					'name' => $block_name,
+					'data' => array(
+						"{$key_prefix}_photo"    => null === $image_id ? '' : (string) $image_id,
+						"{$key_prefix}_hotspots" => (string) wp_json_encode( $hotspots ),
+					),
+					'mode' => 'preview',
+				),
+				'innerBlocks'  => array(),
+				'innerHTML'    => '',
+				'innerContent' => array(),
+			)
+		);
+	}
+
+	/**
+	 * Creates a post holding blocks, saved as the block editor saves it:
+	 * WordPress expects the content slashed, and ACF stores the blocks'
+	 * values while saving.
+	 *
+	 * @param string $content   Serialized blocks.
+	 * @param array  $post_data Other post fields.
+	 * @return int Post ID.
+	 */
+	protected function create_post_with_blocks( string $content, array $post_data = array() ): int {
+		return self::factory()->post->create( array( 'post_content' => wp_slash( $content ) ) + $post_data );
+	}
+
+	/**
+	 * Renders blocks as the frontend does, with the test blocks' Hotspot
+	 * Field rendered through the given entry point.
+	 *
+	 * @param string        $content Serialized blocks.
+	 * @param callable|null $render  Returns the markup of a test block's
+	 *                               Hotspot Field, inside the block; null
+	 *                               for hotspot_field_render( 'hotspots' ).
+	 * @return string Markup.
+	 */
+	protected function render_blocks( string $content, ?callable $render = null ): string {
+		$filter = static fn ( $markup ) => null === $render ? $markup : $render();
+
+		add_filter( 'hotspot_field_tests_block_markup', $filter );
+
+		try {
+			return do_blocks( $content );
+		} finally {
+			remove_filter( 'hotspot_field_tests_block_markup', $filter );
+		}
+	}
+
+	/**
+	 * Renders a block as ACF renders the block editor's preview of it, which
+	 * the editor fetches from the admin with a request per block.
+	 *
+	 * @param string $content Serialized block.
+	 * @param int    $post_id Post being edited.
+	 * @return string Markup.
+	 */
+	protected function render_block_preview( string $content, int $post_id ): string {
+		$blocks = parse_blocks( $content );
+
+		$this->assertCount( 1, $blocks, 'One block to preview.' );
+
+		return $this->in_block_editor( static fn () => acf_rendered_block( $blocks[0]['attrs'], '', true, $post_id ) );
+	}
+
+	/**
+	 * Validates a block's values as the block editor has ACF validate them
+	 * when it fetches the block: from the block's data, under the block's
+	 * input names.
+	 *
+	 * @param string $content Serialized block.
+	 * @return list<string> Error messages; empty when the values are valid.
+	 */
+	protected function validate_block( string $content ): array {
+		$blocks = parse_blocks( $content );
+
+		$this->assertCount( 1, $blocks, 'One block to validate.' );
+
+		// Without an ID of its own, the block is named after its client ID.
+		$block = acf_prepare_block( $blocks[0]['attrs'] + array( 'id' => wp_generate_uuid4() ) );
+		$this->assertIsArray( $block, 'The block is an ACF block.' );
+
+		$state = $this->in_block_editor( static fn () => acf_get_block_validation_state( $block, false, true ) );
+
+		return array_values( array_column( (array) $state['errors'], 'message' ) );
+	}
+
+	/**
+	 * Runs code as in a request of the block editor: on the admin screen for
+	 * editing a post.
+	 *
+	 * @param callable $callback Code to run.
+	 * @return mixed What the code returned.
+	 */
+	protected function in_block_editor( callable $callback ) {
+		$screen_before = $GLOBALS['current_screen'] ?? null;
+		set_current_screen( 'post' );
+
+		try {
+			$this->assertTrue( is_admin(), 'The block editor is in the admin.' );
+
+			return $callback();
+		} finally {
+			$GLOBALS['current_screen'] = $screen_before; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restores the screen set above.
+		}
 	}
 
 	/**

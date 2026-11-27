@@ -1,0 +1,13 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "acf/hotspot-test-callback",
+	"title": "Hotspot test block (ACF block rendering through a callback)",
+	"category": "media",
+	"icon": "location",
+	"acf": {
+		"blockVersion": 3,
+		"mode": "preview",
+		"renderCallback": "hotspot_field_test_block_render"
+	}
+}

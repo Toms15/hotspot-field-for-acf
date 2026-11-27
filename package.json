@@ -19,7 +19,7 @@
 		"test:php": "npm run test:php:default && npm run test:php:without-acf && npm run test:php:old-acf",
 		"test:php:default": "wp-env run tests-cli --env-cwd=wp-content/plugins/hotspot-field-for-acf vendor/bin/phpunit --testsuite default",
 		"test:php:without-acf": "wp-env run tests-cli --env-cwd=wp-content/plugins/hotspot-field-for-acf env HOTSPOT_FIELD_TESTS_WITHOUT_ACF=1 vendor/bin/phpunit --testsuite without-acf",
-		"test:php:old-acf": "wp-env run tests-cli --env-cwd=wp-content/plugins/hotspot-field-for-acf env HOTSPOT_FIELD_TESTS_ACF_VERSION=5.12.6 vendor/bin/phpunit --testsuite old-acf",
+		"test:php:old-acf": "wp-env run tests-cli --env-cwd=wp-content/plugins/hotspot-field-for-acf env HOTSPOT_FIELD_TESTS_ACF_VERSION=6.5.3 vendor/bin/phpunit --testsuite old-acf",
 		"test:e2e": "playwright test",
 		"test": "npm run lint:php && npm run plugin-check && npm run test:php && npm run test:e2e"
 	},

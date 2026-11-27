@@ -173,3 +173,68 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+  e2e-oldest-wordpress:
+    # The oldest supported WordPress shows the block editor without an iframe
+    # when a block of API version 2 is registered, and ACF then offers Edit
+    # mode, with a block's fields inside the block: the ACF block tests run
+    # there too.
+    name: Playwright ACF blocks (WordPress 6.8)
+    needs: acf-pro
+    if: needs.acf-pro.outputs.available == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.3'
+          tools: composer
+          coverage: none
+      - name: Locate the Composer cache
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+      - run: composer install --no-interaction --no-progress
+        env:
+          # Authenticated GitHub downloads avoid anonymous rate limits (HTTP 429).
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Start wp-env on WordPress 6.8, retrying once on a failure
+        # Downloads (WordPress, plugins) sometimes fail transiently, e.g. HTTP
+        # 408 while cloning WordPress. A failed clone leaves nothing behind,
+        # so the retry starts clean; ACF Pro, once installed, is kept.
+        run: |
+          if ! npm run env:start; then
+            echo "::warning title=wp-env retry::Starting wp-env failed; retrying once."
+            sleep 15
+            npm run env:start
+          fi
+        env:
+          ACF_PRO_LICENSE: ${{ secrets.ACF_PRO_LICENSE }}
+          WP_ENV_CORE: WordPress/WordPress#6.8
+      - name: Check the WordPress version
+        run: |
+          npx wp-env run cli wp core version | tee /dev/stderr | grep -q '^6\.8'
+      - name: Check the PHP version WordPress runs on
+        run: |
+          npx wp-env run cli php -r 'echo "PHP ", PHP_VERSION, PHP_EOL; exit( str_starts_with( PHP_VERSION, "8.3." ) ? 0 : 1 );'
+      - run: npx playwright test tests/e2e/acf-block.spec.ts
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: playwright-report-wordpress-6.8
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

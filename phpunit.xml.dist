@@ -21,7 +21,7 @@
 		<testsuite name="without-acf">
 			<directory suffix="Test.php">tests/php/without-acf</directory>
 		</testsuite>
-		<!-- Run with HOTSPOT_FIELD_TESTS_ACF_VERSION=5.12.6: ACF reports an unsupported version. -->
+		<!-- Run with HOTSPOT_FIELD_TESTS_ACF_VERSION=6.5.3: ACF reports an unsupported version. -->
 		<testsuite name="old-acf">
 			<directory suffix="Test.php">tests/php/old-acf</directory>
 		</testsuite>
