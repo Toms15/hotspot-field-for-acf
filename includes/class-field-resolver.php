@@ -279,9 +279,11 @@ final class Field_Resolver {
 
 	/**
 	 * How many `have_rows()` loops were open as a block started rendering.
-	 * For a block whose start was not followed (a render callback wrapped by
-	 * other code after registration, or an ACF release without the template
-	 * hooks), every loop counts as opened before it.
+	 * For a block whose start was not followed, every loop counts as opened
+	 * before it: a render callback wrapped by other code after registration,
+	 * or one that was not yet callable at registration (a function defined
+	 * after `init`, which ACF only checks at render time). Wrapping a
+	 * callback that is not callable would make ACF skip the block's template.
 	 *
 	 * @param string $block_id The block's ACF ID.
 	 */

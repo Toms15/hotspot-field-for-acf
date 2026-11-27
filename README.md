@@ -2,7 +2,7 @@
 
 An [Advanced Custom Fields](https://www.advancedcustomfields.com/) field type that lets editors mark points of interest (Hotspots) on an image, and lets visitors open each Hotspot to read about it.
 
-Requires WordPress 6.8+, PHP 8.3+ and ACF (or ACF Pro) 6.0+. Domain terms are defined in [`GLOSSARY.md`](GLOSSARY.md).
+Requires WordPress 6.8+, PHP 8.3+ and ACF (or ACF Pro) 6.6+. Domain terms are defined in [`GLOSSARY.md`](GLOSSARY.md).
 
 ## Development
 
@@ -47,7 +47,7 @@ The development site is at <http://localhost:8888> (user `admin`, password `pass
 | --- | --- |
 | `npm run lint:php` | PHPCS with WordPress Coding Standards and PHPCompatibilityWP (`composer lint:fix` fixes what it can) |
 | `npm run plugin-check` | Builds `build/hotspot-field-for-acf` (git-tracked files minus `.distignore`) and runs WordPress Plugin Check on it; fails on any error or warning |
-| `npm run test:php` | PHPUnit inside the wp-env tests container, in three runs: `default` (ACF Pro active), `without-acf` and `old-acf` (ACF reporting 5.12.6) |
+| `npm run test:php` | PHPUnit inside the wp-env tests container, in three runs: `default` (ACF Pro active), `without-acf` and `old-acf` (ACF reporting 6.5.3) |
 | `npm run test:e2e` | Playwright (`tests/e2e`) against the development site |
 | `npm test` | All of the above |
 

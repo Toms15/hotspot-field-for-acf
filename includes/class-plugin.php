@@ -78,7 +78,8 @@ final class Plugin {
 	}
 
 	/**
-	 * Explains that ACF 6.0 or later is required.
+	 * Explains that ACF 6.6 or later is required (the first release that
+	 * announces block template renders).
 	 */
 	public static function render_requirement_notice(): void {
 		if ( ! current_user_can( 'activate_plugins' ) ) {

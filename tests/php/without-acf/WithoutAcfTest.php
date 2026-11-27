@@ -11,14 +11,14 @@
 class WithoutAcfTest extends WP_UnitTestCase {
 
 	/**
-	 * Administrators see a notice asking for ACF 6.0 or later.
+	 * Administrators see a notice asking for ACF 6.6 or later.
 	 */
 	public function test_administrators_see_a_requirement_notice(): void {
 		$this->assertFalse( function_exists( 'acf' ), 'This suite must run without ACF.' );
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 
 		$this->assertStringContainsString(
-			'Hotspot Field for ACF requires Advanced Custom Fields (or ACF Pro) 6.0 or later.',
+			'Hotspot Field for ACF requires Advanced Custom Fields (or ACF Pro) 6.6 or later.',
 			get_echo( 'do_action', array( 'admin_notices' ) )
 		);
 	}

@@ -14,7 +14,7 @@ An ACF field type that lets editors mark points of interest on an image.
 
 Hotspot Field for ACF adds a "Hotspot" field type to Advanced Custom Fields. A site builder links it to an image field; editors then place Hotspots on that image.
 
-Requires Advanced Custom Fields (or ACF Pro) 6.0 or later.
+Requires Advanced Custom Fields (or ACF Pro) 6.6 or later.
 
 == Changelog ==
 

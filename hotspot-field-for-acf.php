@@ -19,7 +19,7 @@ namespace HotspotFieldForAcf;
 defined( 'ABSPATH' ) || exit;
 
 const VERSION             = '1.0.0';
-const MINIMUM_ACF_VERSION = '6.0';
+const MINIMUM_ACF_VERSION = '6.6';
 const PLUGIN_FILE         = __FILE__;
 
 require_once __DIR__ . '/includes/class-hotspot-value.php';
