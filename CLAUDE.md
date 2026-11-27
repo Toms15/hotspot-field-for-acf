@@ -14,6 +14,12 @@ Default canonical labels: `needs-triage`, `needs-info`, `ready-for-agent`, `read
 
 Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+## Ground rules for every agent
+
+- **Clean room:** write original code only; never open or download code from the earlier plugins `acf-image-mapping-hotspots` or `image-hotspots-field-for-acf` (ADR 0001).
+- **Secrets:** `.env` holds `ACF_PRO_LICENSE`; read it only programmatically, and keep its value out of output, logs and commits. The dev `.htaccess` keeps dotfiles off HTTP.
+- **Tickets:** implementers and reviewers finish per `docs/agents/definition-of-done.md`; reviewers also apply `CODING_STANDARDS.md`.
+
 ## Workflow
 
 ### Commits
